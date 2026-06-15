@@ -28,6 +28,7 @@ LOG_MODULE_REGISTER(se05x_demo, LOG_LEVEL_INF);
  *   FAIL：这个步骤是必须项但失败，只要 fail 非 0，demo 总体就是 FAILED。
  */
 
+extern const se05x_demo_t g_se05x_demo_uart_safe_api;
 extern const se05x_demo_t g_se05x_demo_safe_read_only;
 extern const se05x_demo_t g_se05x_demo_identity_random;
 extern const se05x_demo_t g_se05x_demo_inventory;
@@ -38,6 +39,7 @@ extern const se05x_demo_t g_se05x_demo_certificate_store;
 extern const se05x_demo_t g_se05x_demo_tls_client_identity;
 
 static const se05x_demo_t *const g_demos[] = {
+	&g_se05x_demo_uart_safe_api,
 	&g_se05x_demo_safe_read_only,
 	&g_se05x_demo_identity_random,
 	&g_se05x_demo_inventory,

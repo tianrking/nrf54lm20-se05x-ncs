@@ -25,9 +25,9 @@
 - NXP Plug & Trust hostlib 运行在 Nordic NCS/Zephyr 上。
 - 通过 T=1 over I2C 和 SE05x 通信。
 - 使用 Platform SCP03 建立安全会话。
-- 运行只读、写入型和 TLS 身份 demo，覆盖版本、唯一 ID、随机数、对象状态、曲线列表、内存状态、ECC 签名、证书存储和 TLS 客户端身份材料检查。
+- 运行 UART 交互式安全 API 菜单、只读、写入型和 TLS 身份 demo，覆盖版本、唯一 ID、随机数、对象状态、曲线列表、内存状态、ECC 签名、证书存储和 TLS 客户端身份材料检查。
 
-当前工程刻意不包含 OTA、Bluetooth、NFC、MCUBoot 等无关产品功能，重点放在 nRF54LM20 和 SE05x 的安全芯片链路。默认选择的 Demo 01 不写 SE05x NVM，适合先确认硬件、驱动、SCP03 和 API 适配是否可靠。
+当前工程刻意不包含 OTA、Bluetooth、NFC、MCUBoot 等无关产品功能，重点放在 nRF54LM20 和 SE05x 的安全芯片链路。默认选择的 Demo 00 是 UART 交互式安全 API 菜单，只包含读、查、随机数、状态、容量这类不会写 SE05x NVM 的接口，适合逐条测试 API。需要一键完整冒烟测试时可切到 Demo 01。
 
 从 Demo 04 开始，工程加入真实业务流程 demo。Demo 04/05 覆盖设备注册、产测上报、应用 key/证书写入前预检；Demo 06/07/08 覆盖 SE 内 ECC 私钥签名、设备证书持久存储、TLS 客户端身份材料检查。Demo 06/07 会写固定 demo object ID，已有对象时不覆盖；Demo 08 不新写对象，只复用 06/07 的 key 和 cert。详细风险说明见 [demo/README.md](demo/README.md)。
 
@@ -40,6 +40,7 @@
 | Zephyr I2C 绑定 | 已验证，默认 `i2c22`，地址 `0x48` |
 | SE05x ATR | 已验证 |
 | Platform SCP03 | 已验证 |
+| UART 交互式安全 API demo | 已实现并构建通过；默认运行 Demo 00 |
 | 只读 demo | 已验证，`pass=13 skip=1 fail=0` |
 | 写入型 demo | 已实现并构建通过；Demo 06/07 会写 demo object ID |
 | TLS 身份 demo | 已实现并构建通过；Demo 08 复用 Demo 06/07 的对象 |
@@ -133,13 +134,14 @@ flowchart TD
 当前 demo 由 [src/main.c](src/main.c) 中这个宏选择：
 
 ```c
-#define APP_SELECTED_DEMO SE05X_DEMO_SAFE_READ_ONLY
+#define APP_SELECTED_DEMO SE05X_DEMO_UART_SAFE_API
 ```
 
 可选值：
 
 | 宏 | 对应 demo | 说明 |
 | --- | --- | --- |
+| `SE05X_DEMO_UART_SAFE_API` | Demo 00 | UART 交互式安全 API 菜单，逐条测试本工程安全 APDU 接口。 |
 | `SE05X_DEMO_SAFE_READ_ONLY` | Demo 01 | 完整只读冒烟测试，首次 bring-up 推荐。 |
 | `SE05X_DEMO_IDENTITY_RANDOM` | Demo 02 | 快速读取身份和随机数。 |
 | `SE05X_DEMO_INVENTORY` | Demo 03 | 查看能力、对象、曲线和空间状态。 |

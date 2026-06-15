@@ -9,14 +9,15 @@
 #include "sm_types.h"
 
 typedef enum {
-	SE05X_DEMO_SAFE_READ_ONLY = 0,  /* 01：完整只读冒烟测试 */
-	SE05X_DEMO_IDENTITY_RANDOM,     /* 02：身份信息和随机数快速检查 */
-	SE05X_DEMO_INVENTORY,           /* 03：能力、对象和空间清单 */
-	SE05X_DEMO_BUSINESS_ONBOARDING, /* 04：真实业务设备注册前置流程 */
-	SE05X_DEMO_PROVISIONING_CHECK,  /* 05：密钥和证书写入前预检流程 */
-	SE05X_DEMO_ECC_SIGN_VERIFY,     /* 06：SE 内 ECC 私钥签名和公钥验签 */
-	SE05X_DEMO_CERTIFICATE_STORE,   /* 07：设备证书对象写入和回读校验 */
-	SE05X_DEMO_TLS_CLIENT_IDENTITY, /* 08：TLS 客户端身份材料检查和挑战签名 */
+	SE05X_DEMO_UART_SAFE_API = 0,       /* 00：UART 交互式安全 API 菜单 */
+	SE05X_DEMO_SAFE_READ_ONLY = 1,      /* 01：完整只读冒烟测试 */
+	SE05X_DEMO_IDENTITY_RANDOM = 2,     /* 02：身份信息和随机数快速检查 */
+	SE05X_DEMO_INVENTORY = 3,           /* 03：能力、对象和空间清单 */
+	SE05X_DEMO_BUSINESS_ONBOARDING = 4, /* 04：真实业务设备注册前置流程 */
+	SE05X_DEMO_PROVISIONING_CHECK = 5,  /* 05：密钥和证书写入前预检流程 */
+	SE05X_DEMO_ECC_SIGN_VERIFY = 6,     /* 06：SE 内 ECC 私钥签名和公钥验签 */
+	SE05X_DEMO_CERTIFICATE_STORE = 7,   /* 07：设备证书对象写入和回读校验 */
+	SE05X_DEMO_TLS_CLIENT_IDENTITY = 8, /* 08：TLS 客户端身份材料检查和挑战签名 */
 } se05x_demo_id_t;
 
 #define SE05X_DEMO_OBJECT_ID_ECC_KEY 0xEF060001u

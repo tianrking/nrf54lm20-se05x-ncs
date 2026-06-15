@@ -100,6 +100,7 @@ target_link_libraries(nxp_se05x PUBLIC se05x_bus zephyr_interface)
 target_sources(app PRIVATE
     src/main.c
     demo/se05x_demo.c
+    demo/se05x_demo_00_uart_safe_api.c
     demo/se05x_demo_01_safe_read_only.c
     demo/se05x_demo_02_identity_random.c
     demo/se05x_demo_03_inventory.c

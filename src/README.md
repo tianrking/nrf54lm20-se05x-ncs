@@ -16,13 +16,14 @@
 修改下面这一行即可切换 demo：
 
 ```c
-#define APP_SELECTED_DEMO SE05X_DEMO_SAFE_READ_ONLY
+#define APP_SELECTED_DEMO SE05X_DEMO_UART_SAFE_API
 ```
 
 可选值：
 
 | 宏 | 说明 |
 | --- | --- |
+| `SE05X_DEMO_UART_SAFE_API` | Demo 00，UART 交互式安全 API 菜单，逐条测试只读/查询/随机数接口。 |
 | `SE05X_DEMO_SAFE_READ_ONLY` | Demo 01，完整只读冒烟测试。 |
 | `SE05X_DEMO_IDENTITY_RANDOM` | Demo 02，快速读取身份和随机数。 |
 | `SE05X_DEMO_INVENTORY` | Demo 03，查看能力、对象和空间清单。 |
@@ -58,6 +59,7 @@ flowchart TD
 | `app_register_transport()` | overlay、I2C controller、SE05x alias、地址问题。 |
 | `se05x_zephyr_i2c_bus_create()` | Zephyr 设备绑定、I2C ready 状态。 |
 | `app_open_se_session()` | SCP03、host crypto、profile、key 配置。 |
+| `run_uart_safe_api()` | Demo 00 串口菜单、命令输入和单个安全 APDU 返回值。 |
 | 当前 demo 的 `run_xxx()` | 具体 APDU 调用和返回状态。 |
 
 当前 `prj.conf` 已打开：

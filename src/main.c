@@ -21,6 +21,7 @@ LOG_MODULE_REGISTER(nrf54lm20_se05x, LOG_LEVEL_INF);
  *
  * 后续要切换示例时，只改下面这一行即可，不需要改 main() 的流程。
  *
+ *   SE05X_DEMO_UART_SAFE_API    - 00 号示例：UART 交互式安全 API 菜单。
  *   SE05X_DEMO_SAFE_READ_ONLY   - 01 号示例：最完整的只读冒烟测试。
  *   SE05X_DEMO_IDENTITY_RANDOM  - 02 号示例：快速读取身份信息和随机数。
  *   SE05X_DEMO_INVENTORY        - 03 号示例：查看能力、保留对象和存储空间。
@@ -37,7 +38,7 @@ LOG_MODULE_REGISTER(nrf54lm20_se05x, LOG_LEVEL_INF);
  *   - 用到了 SE05x 的哪些功能/APDU
  *   - 是否会写入 SE05x NVM
  */
-#define APP_SELECTED_DEMO SE05X_DEMO_SAFE_READ_ONLY
+#define APP_SELECTED_DEMO SE05X_DEMO_UART_SAFE_API
 
 static ex_sss_boot_ctx_t s_boot_ctx;
 static se05x_bus_t s_i2c_bus;

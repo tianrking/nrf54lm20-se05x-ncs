@@ -4,6 +4,7 @@
 
 当前 demo 的共同原则：
 
+- Demo 00 是 UART 交互式安全 API 菜单，只包含读、查、随机数、状态和容量类接口。
 - Demo 01-05 默认不写 SE05x persistent NVM。
 - Demo 06/07 是写入型 demo，会写固定 demo object ID，已有对象时不覆盖。
 - Demo 08 不新写对象，只复用 Demo 06/07 已准备好的 key 和 certificate。
@@ -14,6 +15,7 @@
 
 | 编号 | 文件 | 名称 | 场景 | 是否写 NVM |
 | --- | --- | --- | --- | --- |
+| 00 | `se05x_demo_00_uart_safe_api.c` | `uart_safe_api` | UART 交互式逐条测试安全 APDU API。 | 否 |
 | 01 | `se05x_demo_01_safe_read_only.c` | `safe_read_only` | 首次 bring-up、完整只读冒烟测试。 | 否 |
 | 02 | `se05x_demo_02_identity_random.c` | `identity_random` | 快速读取 SE 身份和随机数。 | 否 |
 | 03 | `se05x_demo_03_inventory.c` | `inventory` | 查看能力、对象、曲线、crypto object 和空间。 | 否 |
@@ -27,6 +29,7 @@
 
 | 文档章节 | 源码文件 | 入口函数 | 注册结构体 | 主要 API 类型 |
 | --- | --- | --- | --- | --- |
+| Demo 00 | `se05x_demo_00_uart_safe_api.c` | `run_uart_safe_api()` | `g_se05x_demo_uart_safe_api` | UART 菜单、版本、随机数、对象读取、对象检查、空间、列表、状态。 |
 | Demo 01 | `se05x_demo_01_safe_read_only.c` | `run_safe_read_only()` | `g_se05x_demo_safe_read_only` | 版本、随机数、对象读取、对象检查、空间、列表、状态。 |
 | Demo 02 | `se05x_demo_02_identity_random.c` | `run_identity_random()` | `g_se05x_demo_identity_random` | 版本、唯一 ID、随机数、状态。 |
 | Demo 03 | `se05x_demo_03_inventory.c` | `run_inventory()` | `g_se05x_demo_inventory` | 版本能力、对象检查、空间、曲线、crypto object、对象列表。 |
@@ -63,6 +66,102 @@ flowchart TD
 | `ex_sss_boot_open()` | 建立 SE05x session，并完成 Platform SCP03。 |
 | key store init | 为后续 key object、签名、加密类 demo 准备上下文。 |
 | demo run | 只在安全会话成功后运行具体 APDU/SSS 调用。 |
+
+## Demo 00：uart_safe_api
+
+文件：`se05x_demo_00_uart_safe_api.c`
+
+### 适用场景
+
+这是一个串口交互式 API 测试台。它适合在 bring-up、调试、教学和现场排查时使用：不用为了测试一个接口反复修改 `main.c`，只要打开串口，在提示符后输入一个命令，就能立即调用对应 API 并看到返回值。
+
+它回答的问题是：
+
+- Platform SCP03 session 打开后，单个 API 能不能稳定返回。
+- 哪个 API 在当前 SE052 applet/OEF 上可用，哪个会被权限或配置限制。
+- 每个安全 API 的返回长度、状态字和数据 preview 是什么。
+- 现场排查时，是链路问题、session 问题，还是某个具体 APDU 问题。
+
+### 安全边界
+
+Demo 00 **不写 SE05x NVM**，不会创建对象、不会写 key、不会写证书、不会删除对象、不会修改策略、不会修改生命周期，也不会做个性化。它只包含本工程已经在 Demo 01-05 中使用过的安全接口类别。
+
+这里的“全部 API”指本工程当前已验证的安全 APDU 类接口，不是 NXP Plug & Trust hostlib 的全部函数。NXP 库里还有写入、删除、策略、生命周期、加密运算等接口，那些必须放到单独业务 demo 中，并明确 object ID、权限和恢复方案。
+
+### 串口菜单
+
+| 命令 | API | 作用 | 是否安全 |
+| --- | --- | --- | --- |
+| `0` / `h` | 无 | 重新打印菜单。 | 是 |
+| `1` | `Se05x_API_GetVersion()` | 读取 applet version、applet config 和 SecureBox 版本。 | 是 |
+| `2` | `Se05x_API_GetExtVersion()` | 读取扩展版本和配置字节。 | 是 |
+| `3` | `Se05x_API_GetRandom()` | 生成 16 字节随机数。 | 是 |
+| `4` | `Se05x_API_ReadObject(kSE05x_AppletResID_UNIQUE_ID)` | 读取芯片 UniqueID。 | 是 |
+| `5` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_UNIQUE_ID)` | 检查 UniqueID 保留对象。 | 是 |
+| `6` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_FEATURE)` | 检查 feature 保留对象。 | 是 |
+| `7` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_PLATFORM_SCP)` | 检查 Platform SCP 保留对象。 | 是 |
+| `8` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_PERSISTENT)` | 读取 persistent 剩余空间。 | 是 |
+| `9` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_RESET)` | 读取 reset transient 剩余空间。 | 是 |
+| `a` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_DESELECT)` | 读取 deselect transient 剩余空间。 | 是 |
+| `b` | `Se05x_API_ReadECCurveList()` | 读取 ECC 曲线列表。 | 是 |
+| `c` | `Se05x_API_ReadCryptoObjectList()` | 读取 crypto object 列表。 | 是 |
+| `d` | `Se05x_API_ReadState()` | 读取 applet 状态摘要。 | 是 |
+| `e` | `Se05x_API_ReadIDList()` | 尝试读取对象 ID 列表；部分 OEF 可能不开放。 | 是，失败按 SKIP 看 |
+| `q` | 无 | 退出 Demo 00，返回 `main.c` 关闭 session。 | 是 |
+
+### API 流程
+
+```mermaid
+flowchart TD
+    A["run_uart_safe_api()"] --> B["打印 UART 菜单"]
+    B --> C["等待用户输入命令"]
+    C --> D{"命令类型"}
+    D -->|1| E["GetVersion"]
+    D -->|2| F["GetExtVersion"]
+    D -->|3| G["GetRandom 16 bytes"]
+    D -->|4| H["ReadObject UNIQUE_ID"]
+    D -->|5/6/7| I["CheckObjectExists 保留对象"]
+    D -->|8/9/a| J["GetFreeMemory"]
+    D -->|b| K["ReadECCurveList"]
+    D -->|c| L["ReadCryptoObjectList"]
+    D -->|d| M["ReadState"]
+    D -->|e| N["ReadIDList"]
+    D -->|q| O["返回 main.c"]
+    E --> P["打印 OK/FAIL 和返回数据"]
+    F --> P
+    G --> P
+    H --> P
+    I --> P
+    J --> P
+    K --> P
+    L --> P
+    M --> P
+    N --> Q{"ReadIDList 是否开放"}
+    Q -->|成功| P
+    Q -->|失败| R["打印 SKIP，不作为危险错误"]
+    P --> C
+    R --> C
+```
+
+### 时序作用
+
+Demo 00 的时序不是固定流水线，而是“session 打开后一直等待命令”。这对 debug 很有用：你可以先输入 `1` 看版本，再输入 `3` 连续观察随机数，再输入 `4` 看 UniqueID，最后输入 `b/c/d/e` 看 applet 能力和状态。每一步都只触发一个 API，因此返回错误时定位范围非常小。
+
+### 期望输出
+
+```text
+Demo 00 已启动。请在串口输入命令；输入 0 或 h 查看菜单，输入 q 退出。
+se05x-safe-api> 1
+OK   GetVersion len=7
+     Applet version : 7.2.22
+     Applet config  : 0x26F2
+     SecureBox      : 255.255
+se05x-safe-api> 3
+OK   GetRandom len=16
+UART_API Random len=16 preview=...
+se05x-safe-api> e
+SKIP ReadIDList sw=0xFFFF，该接口在当前 applet/OEF 上可能不开放。
+```
 
 ## Demo 01：safe_read_only
 
