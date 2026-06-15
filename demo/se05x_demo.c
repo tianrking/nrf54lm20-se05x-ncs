@@ -17,7 +17,7 @@ LOG_MODULE_REGISTER(se05x_demo, LOG_LEVEL_INF);
  * SE05x demo 公共注册表。
  *
  * 这个文件不放具体业务 demo，只负责：
- *   1. 收集 demo/se05x_demo_01_*.c、02_*.c、03_*.c 暴露出来的 demo 描述。
+ *   1. 收集 demo/se05x_demo_xx_*.c 暴露出来的 demo 描述。
  *   2. 根据 main.c 里选中的 enum 找到对应 demo。
  *   3. 在串口上打印“有哪些 demo、当前选了哪个、适用场景、流程、预期输出”。
  *   4. 提供统一的 PASS/SKIP/FAIL 统计和十六进制 preview 打印。

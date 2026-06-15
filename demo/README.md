@@ -497,7 +497,7 @@ Demo 04/05 已经覆盖真实业务的前置流程，但还没有真正写入应
 
 新增 demo 时建议遵循：
 
-1. 文件名使用 `se05x_demo_04_xxx.c`。
+1. 文件名使用 `se05x_demo_xx_xxx.c`，例如 `se05x_demo_06_ecc_sign_verify.c`。
 2. 在 `se05x_demo.h` 中添加枚举。
 3. 在 `se05x_demo.c` 的 catalog 中注册。
 4. 在根 `CMakeLists.txt` 中加入源文件。
