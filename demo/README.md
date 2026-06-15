@@ -761,6 +761,7 @@ Demo tls_client_identity 总体结果：OK
 它不是完整 BTC/ETH 钱包 demo。它不解析 BTC transaction，不计算 double-SHA256，不做 Ethereum Keccak，不派生地址，不生成 recovery id，也不处理 low-S 规范化。它只验证最底层的 SE 能力：`secp256k1` 曲线是否能启用、SE 内是否能生成该曲线 key、是否能对 32 字节 digest 做 ECDSA sign/verify。
 
 Demo 09 启动后会自动跑一次完整验证，然后停在串口 AT 文本菜单，便于你不重烧固件反复测试。
+进入 AT 菜单前，代码会先调用 Zephyr `console_init()` 初始化 `console_getchar()` 输入路径；如果初始化失败，会直接返回失败而不是继续等待输入。
 
 | 命令 | 作用 | 是否可能写 NVM |
 | --- | --- | --- |

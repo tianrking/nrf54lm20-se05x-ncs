@@ -496,6 +496,12 @@ static sss_status_t run_wallet_sign_only(ex_sss_boot_ctx_t *boot_ctx)
 static sss_status_t run_wallet_curve_check(ex_sss_boot_ctx_t *boot_ctx)
 {
 	sss_status_t last_status;
+	int err = console_init();
+
+	if (err != 0) {
+		LOG_ERR("console_init failed: %d", err);
+		return kStatus_SSS_Fail;
+	}
 
 	last_status = run_wallet_probe_once(boot_ctx);
 	wallet_print_menu();
