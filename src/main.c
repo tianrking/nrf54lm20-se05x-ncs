@@ -14,33 +14,25 @@ LOG_MODULE_REGISTER(nrf54lm20_se05x, LOG_LEVEL_INF);
 /*
  * Demo 选择入口。
  *
- * 这个 main.c 只做三件事：
- *   1. 初始化 nRF54LM20 到 SE05x 的 I2C 传输层。
- *   2. 通过 Platform SCP03 打开到 SE05x 的安全会话。
- *   3. 根据 APP_SELECTED_DEMO 分发到 demo/ 目录下的某一个示例。
+ * main.c 只负责初始化 transport、打开 SE05x Platform SCP03 session，
+ * 然后根据 APP_SELECTED_DEMO 分发到 demo/ 目录下的具体示例。
  *
- * 后续要切换示例时，只改下面这一行即可，不需要改 main() 的流程。
+ * 后续切换示例时，只改下面这一行即可，不需要改 main() 主流程。
  *
- *   SE05X_DEMO_UART_SAFE_API    - 00 号示例：UART 交互式安全 API 菜单。
- *   SE05X_DEMO_SAFE_READ_ONLY   - 01 号示例：最完整的只读冒烟测试。
- *   SE05X_DEMO_IDENTITY_RANDOM  - 02 号示例：快速读取身份信息和随机数。
- *   SE05X_DEMO_INVENTORY        - 03 号示例：查看能力、保留对象和存储空间。
- *   SE05X_DEMO_BUSINESS_ONBOARDING - 04 号示例：真实设备注册/产测上报前置流程。
- *   SE05X_DEMO_PROVISIONING_CHECK  - 05 号示例：应用 key/证书写入前预检流程。
- *   SE05X_DEMO_ECC_SIGN_VERIFY     - 06 号示例：写入 demo ECC 私钥并做签名验签。
- *   SE05X_DEMO_CERTIFICATE_STORE   - 07 号示例：写入 demo 设备证书并回读校验。
- *   SE05X_DEMO_TLS_CLIENT_IDENTITY - 08 号示例：用 06/07 的对象模拟 TLS 客户端身份。
- *   SE05X_DEMO_WALLET_CURVE_CHECK  - 09 号示例：研究 secp256k1 曲线能否启用并签名。
- *   SE05X_DEMO_ETH_WALLET_SIGN     - 10 号示例：ETH legacy transfer 签名流程研究。
- *
- * 每个具体 demo 都放在 demo/se05x_demo_xx_*.c 里。文件顶部有中文说明：
- *   - 适合什么情况使用
- *   - 测试流程是什么
- *   - 串口上期望看到什么输出
- *   - 用到了 SE05x 的哪些功能/APDU
- *   - 是否会写入 SE05x NVM
+ *   SE05X_DEMO_UART_SAFE_API       - 00：UART 交互式安全 API 菜单。
+ *   SE05X_DEMO_SAFE_READ_ONLY      - 01：完整只读冒烟测试。
+ *   SE05X_DEMO_IDENTITY_RANDOM     - 02：读取身份信息和随机数。
+ *   SE05X_DEMO_INVENTORY           - 03：查看能力、保留对象和存储空间。
+ *   SE05X_DEMO_BUSINESS_ONBOARDING - 04：设备注册/产测上报前置流程。
+ *   SE05X_DEMO_PROVISIONING_CHECK  - 05：应用 key/证书写入前预检流程。
+ *   SE05X_DEMO_ECC_SIGN_VERIFY     - 06：写入 demo ECC 私钥并做签名验签。
+ *   SE05X_DEMO_CERTIFICATE_STORE   - 07：写入 demo 设备证书并回读校验。
+ *   SE05X_DEMO_TLS_CLIENT_IDENTITY - 08：用 06/07 对象模拟 TLS 客户端身份。
+ *   SE05X_DEMO_WALLET_CURVE_CHECK  - 09：验证 secp256k1 曲线和签名能力。
+ *   SE05X_DEMO_ETH_WALLET_SIGN     - 10：ETH legacy transfer 签名流程研究。
+ *   SE05X_DEMO_ETH_TESTNET_WALLET  - 11：ETH Sepolia 持久化钱包签名流程。
  */
-#define APP_SELECTED_DEMO SE05X_DEMO_ETH_WALLET_SIGN
+#define APP_SELECTED_DEMO SE05X_DEMO_ETH_TESTNET_WALLET
 
 static ex_sss_boot_ctx_t s_boot_ctx;
 static se05x_bus_t s_i2c_bus;
@@ -48,12 +40,8 @@ static se05x_bus_t s_i2c_bus;
 static int app_register_transport(void)
 {
 	/*
-	 * 创建 Zephyr I2C 传输对象。
-	 *
-	 * 当前工程的 boards 目录下的 overlay 已经把 SE05x 绑定到 i2c22，地址 0x48。
-	 * se05x_zephyr_i2c_bus_create() 会从 devicetree 取出这个节点，并确认
-	 * I2C 控制器 ready。这里失败通常说明 overlay、管脚、供电或 I2C 外设
-	 * 没准备好。
+	 * 从 devicetree alias `se05x` 创建 Zephyr I2C backend。
+	 * 当前 overlay 将 SE05x 绑定到 i2c22，地址 0x48。
 	 */
 	int err = se05x_zephyr_i2c_bus_create(&s_i2c_bus, NULL);
 
@@ -63,9 +51,8 @@ static int app_register_transport(void)
 	}
 
 	/*
-	 * NXP Plug & Trust hostlib 里面的 T=1 over I2C 层会通过一个“默认 bus”
-	 * 访问 SE05x。这里把刚创建好的 Zephyr I2C bus 注册进去，后续
-	 * ex_sss_boot_open() 和各个 APDU API 才知道该走哪条 I2C 链路。
+	 * NXP T=1 over I2C porting 层通过默认 bus 访问 SE05x。
+	 * 必须在 ex_sss_boot_open() 之前完成注册。
 	 */
 	err = se05x_bus_register_default(&s_i2c_bus.ops);
 	if (err != 0) {
@@ -81,11 +68,9 @@ static int app_open_se_session(void)
 	sss_status_t status;
 
 	/*
-	 * 打开 SE05x 会话。
-	 *
-	 * 当前 fsl_sss_ftr.h 选择的是 Platform SCP03，所以这一步不仅是“连上
-	 * SE05x”，还会完成 SCP03 安全通道认证。之前遇到的 PSA RNG 没打开、
-	 * SCP03 key/profile 不匹配，都会在这里失败。
+	 * 打开 SE05x session。
+	 * 当前 fsl_sss_ftr.h 选择 Platform SCP03，所以这里会同时完成
+	 * I2C/T=1 连接、ATR 读取和 SCP03 安全通道认证。
 	 */
 	memset(&s_boot_ctx, 0, sizeof(s_boot_ctx));
 	status = ex_sss_boot_open(&s_boot_ctx, NULL);
@@ -97,10 +82,7 @@ static int app_open_se_session(void)
 
 	/*
 	 * 初始化 SSS key store/object 上下文。
-	 *
-	 * 只读 demo 对它的依赖不重，但后续如果增加“创建 AES key”“ECC 签名”
-	 * 等示例，会需要这个对象管理上下文。这里失败先记 warning，避免影响
-	 * 当前已经能跑的只读示例。
+	 * 只读 demo 对它依赖不强，但 key 生成、签名、证书类 demo 需要它。
 	 */
 	status = ex_sss_key_store_and_object_init(&s_boot_ctx);
 	if (status != kStatus_SSS_Success) {
@@ -144,8 +126,8 @@ int main(void)
 	}
 
 	/*
-	 * 当前 demo 都是一次性执行。执行完后关闭 SE05x session，然后让主线程
-	 * 睡眠保活，方便串口日志停留，也方便 debugger 连接后查看状态。
+	 * demo 运行完成后关闭 SE05x session。
+	 * 主线程随后 sleep，方便串口日志停留和 debugger 继续查看现场。
 	 */
 	ex_sss_session_close(&s_boot_ctx);
 

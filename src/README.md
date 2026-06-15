@@ -1,29 +1,30 @@
 # src 子项目说明
 
-`src/` 目录只保留应用主入口，目前只有 `main.c`。具体 SE05x 示例不堆在这里，而是放到 `demo/` 目录。
+`src/` 目录只保留应用主入口，目前核心文件是 `main.c`。具体 SE05x 示例全部放在 `demo/` 目录，不堆在主入口里。
 
-## main.c 职责
+## `main.c` 职责
 
-`main.c` 只做四件事：
+`main.c` 只做五件事：
 
 1. 选择当前要运行的 demo。
 2. 初始化 nRF54LM20 到 SE05x 的 Zephyr I2C transport。
-3. 通过 NXP Plug & Trust 打开 SE05x Platform SCP03 安全会话。
-4. 把控制权分发给 `demo/` 目录下的具体 demo。
+3. 将 Zephyr I2C backend 注册给 `se05x_bus` 默认 transport。
+4. 通过 NXP Plug & Trust 打开 SE05x Platform SCP03 安全会话。
+5. 把控制权分发给 `demo/` 目录下的具体 demo。
 
-## 串口输出约定
+## 当前默认 demo
 
-`main.c` 和各个 demo 的运行时串口日志统一使用英文 ASCII。中文说明不直接从固件打印到串口，而是放在 README 和源码注释里。这样串口终端即使不是 UTF-8 编码，也不会把中文显示成乱码。
+当前默认值：
 
-新增日志时建议遵守：
+```c
+#define APP_SELECTED_DEMO SE05X_DEMO_ETH_TESTNET_WALLET
+```
 
-- `LOG_INF()`、`LOG_WRN()`、`LOG_ERR()` 中的可见字符串使用英文 ASCII。
-- `printk()` 菜单和交互提示使用英文 ASCII。
-- 复杂背景、业务解释、安全风险写在中文 README 或源码注释中。
+也就是 Demo11：`eth_testnet_wallet`。它用于创建或复用 SE05x 内部持久化钱包私钥对象 `0xEF110001`，输出稳定 ETH 地址，并对真实 Sepolia legacy 交易字段进行 SE 内部 secp256k1 ECDSA 签名。
 
-## Demo 选择
+## 如何切换 demo
 
-修改下面这一行即可切换 demo：
+只改 `main.c` 中这一行：
 
 ```c
 #define APP_SELECTED_DEMO SE05X_DEMO_UART_SAFE_API
@@ -31,19 +32,20 @@
 
 可选值：
 
-| 宏 | 说明 |
-| --- | --- |
-| `SE05X_DEMO_UART_SAFE_API` | Demo 00，UART 交互式安全 API 菜单，逐条测试只读/查询/随机数接口。 |
-| `SE05X_DEMO_SAFE_READ_ONLY` | Demo 01，完整只读冒烟测试。 |
-| `SE05X_DEMO_IDENTITY_RANDOM` | Demo 02，快速读取身份和随机数。 |
-| `SE05X_DEMO_INVENTORY` | Demo 03，查看能力、对象和空间清单。 |
-| `SE05X_DEMO_BUSINESS_ONBOARDING` | Demo 04，设备注册/产测上报前置业务流程。 |
-| `SE05X_DEMO_PROVISIONING_CHECK` | Demo 05，应用 key/证书写入前业务预检。 |
-| `SE05X_DEMO_ECC_SIGN_VERIFY` | Demo 06，写入/复用 demo ECC 私钥并做签名验签。 |
-| `SE05X_DEMO_CERTIFICATE_STORE` | Demo 07，写入/复用 demo 设备证书并回读校验。 |
-| `SE05X_DEMO_TLS_CLIENT_IDENTITY` | Demo 08，复用 Demo 06/07 对象模拟 TLS 客户端身份。 |
-| `SE05X_DEMO_WALLET_CURVE_CHECK` | Demo 09，研究 secp256k1 曲线能否启用并完成 transient key 签名验签；可能写一次曲线参数 NVM，默认不运行。 |
-| `SE05X_DEMO_ETH_WALLET_SIGN` | Demo 10，完整演示 ETH legacy transfer 的 RLP、Keccak-256、SE05x secp256k1 签名、公钥推地址和 raw tx 候选输出；可能写一次曲线参数 NVM，默认不运行。 |
+| 宏 | 编号 | 用途 |
+| --- | --- | --- |
+| `SE05X_DEMO_UART_SAFE_API` | 00 | UART 交互式安全 API 菜单。 |
+| `SE05X_DEMO_SAFE_READ_ONLY` | 01 | 完整只读冒烟测试。 |
+| `SE05X_DEMO_IDENTITY_RANDOM` | 02 | 快速读取身份信息和随机数。 |
+| `SE05X_DEMO_INVENTORY` | 03 | 查看能力、保留对象、曲线和存储空间。 |
+| `SE05X_DEMO_BUSINESS_ONBOARDING` | 04 | 真实设备注册/产测上报前置流程。 |
+| `SE05X_DEMO_PROVISIONING_CHECK` | 05 | 应用 key/证书写入前预检流程。 |
+| `SE05X_DEMO_ECC_SIGN_VERIFY` | 06 | 写入 demo ECC 私钥并做签名验签。 |
+| `SE05X_DEMO_CERTIFICATE_STORE` | 07 | 写入 demo 设备证书并回读校验。 |
+| `SE05X_DEMO_TLS_CLIENT_IDENTITY` | 08 | 用 06/07 的对象模拟 TLS 客户端身份。 |
+| `SE05X_DEMO_WALLET_CURVE_CHECK` | 09 | 研究 secp256k1 曲线能否启用并签名。 |
+| `SE05X_DEMO_ETH_WALLET_SIGN` | 10 | ETH legacy transfer 签名链路研究，使用临时 key。 |
+| `SE05X_DEMO_ETH_TESTNET_WALLET` | 11 | ETH Sepolia 测试网签名流程，使用 SE05x 持久化钱包 key。 |
 
 ## 主流程
 
@@ -55,39 +57,25 @@ flowchart TD
     D --> E["se05x_bus_register_default()"]
     E --> F["app_open_se_session()"]
     F --> G["ex_sss_boot_open()"]
-    G --> H["ex_sss_key_store_and_object_init()"]
-    H --> I["demo->run(&s_boot_ctx)"]
-    I --> J["ex_sss_session_close()"]
-    J --> K["while sleep 保留现场"]
+    G --> H["Platform SCP03 安全会话"]
+    H --> I["ex_sss_key_store_and_object_init()"]
+    I --> J["demo->run(&s_boot_ctx)"]
+    J --> K["ex_sss_session_close()"]
+    K --> L["主线程 sleep，保留日志和调试现场"]
 ```
 
 ## 调试建议
 
-推荐断点位置：
-
-| 位置 | 适合排查的问题 |
+| 断点位置 | 适合排查的问题 |
 | --- | --- |
-| `main()` 开头 | 确认固件是否真的运行到应用层。 |
+| `main()` 开头 | 固件是否真正跑到应用层。 |
 | `app_register_transport()` | overlay、I2C controller、SE05x alias、地址问题。 |
 | `se05x_zephyr_i2c_bus_create()` | Zephyr 设备绑定、I2C ready 状态。 |
-| `app_open_se_session()` | SCP03、host crypto、profile、key 配置。 |
-| `run_uart_safe_api()` | Demo 00 串口菜单、命令输入和单个安全 APDU 返回值。 |
-| 当前 demo 的 `run_xxx()` | 具体 APDU 调用和返回状态。 |
+| `app_open_se_session()` | SCP03、host crypto、profile、key 配置问题。 |
+| 当前 demo 的 `run_xxx()` | 具体 APDU/SSS 调用和返回状态。 |
 
-当前 `prj.conf` 已打开：
+如果 debugger 停在 Zephyr 内部 `onoff.c`、clock、UART backend 等位置，通常不是应用逻辑断住，而是 IDE 的暂停/断点/异常捕获策略导致的。可以先清理无关断点，只保留 `main.c` 和当前 demo 文件中的断点。
 
-```text
-CONFIG_DEBUG=y
-CONFIG_DEBUG_OPTIMIZATIONS=y
-```
+## 串口输出约定
 
-这比 release 优化更适合源码断点。NXP hostlib 内部宏和内联较多，debugger 跳转看起来可能不够线性，这是正常现象。
-
-## 为什么 main.c 不放具体 demo
-
-这样拆分有几个好处：
-
-- 主流程稳定，不会因为新增 demo 反复改启动逻辑。
-- demo 可以按编号独立扩展。
-- 只读 demo、写入型 demo、TLS demo、证书 demo 可以分文件管理。
-- README 能和 demo 文件一一对应，后续维护更清楚。
+固件运行时串口输出统一使用英文 ASCII，避免不同串口工具对中文 UTF-8 解码不一致导致乱码。中文解释写在 README 和源码注释里；串口菜单、状态、错误、返回值只打印英文、数字、十六进制和 `OK/FAIL/SKIP`。

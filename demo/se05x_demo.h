@@ -9,17 +9,18 @@
 #include "sm_types.h"
 
 typedef enum {
-	SE05X_DEMO_UART_SAFE_API = 0,       /* 00：UART 交互式安全 API 菜单 */
-	SE05X_DEMO_SAFE_READ_ONLY = 1,      /* 01：完整只读冒烟测试 */
-	SE05X_DEMO_IDENTITY_RANDOM = 2,     /* 02：身份信息和随机数快速检查 */
-	SE05X_DEMO_INVENTORY = 3,           /* 03：能力、对象和空间清单 */
-	SE05X_DEMO_BUSINESS_ONBOARDING = 4, /* 04：真实业务设备注册前置流程 */
-	SE05X_DEMO_PROVISIONING_CHECK = 5,  /* 05：密钥和证书写入前预检流程 */
-	SE05X_DEMO_ECC_SIGN_VERIFY = 6,     /* 06：SE 内 ECC 私钥签名和公钥验签 */
-	SE05X_DEMO_CERTIFICATE_STORE = 7,   /* 07：设备证书对象写入和回读校验 */
-	SE05X_DEMO_TLS_CLIENT_IDENTITY = 8, /* 08：TLS 客户端身份材料检查和挑战签名 */
-	SE05X_DEMO_WALLET_CURVE_CHECK = 9,  /* 09：钱包 secp256k1 曲线启用和签名验证研究 */
-	SE05X_DEMO_ETH_WALLET_SIGN = 10,    /* 10：ETH legacy transfer RLP/Keccak/SE 签名流程 */
+	SE05X_DEMO_UART_SAFE_API = 0,       /* 00: UART 交互式安全 API 菜单 */
+	SE05X_DEMO_SAFE_READ_ONLY = 1,      /* 01: 完整只读冒烟测试 */
+	SE05X_DEMO_IDENTITY_RANDOM = 2,     /* 02: 身份信息和随机数 */
+	SE05X_DEMO_INVENTORY = 3,           /* 03: 能力、对象、曲线和空间清单 */
+	SE05X_DEMO_BUSINESS_ONBOARDING = 4, /* 04: 设备注册/产测上报前置流程 */
+	SE05X_DEMO_PROVISIONING_CHECK = 5,  /* 05: 应用 key/证书写入前预检 */
+	SE05X_DEMO_ECC_SIGN_VERIFY = 6,     /* 06: SE 内 ECC 私钥签名和公钥验签 */
+	SE05X_DEMO_CERTIFICATE_STORE = 7,   /* 07: 设备证书对象写入和回读校验 */
+	SE05X_DEMO_TLS_CLIENT_IDENTITY = 8, /* 08: TLS 客户端身份材料检查和挑战签名 */
+	SE05X_DEMO_WALLET_CURVE_CHECK = 9,  /* 09: secp256k1 曲线启用和签名能力验证 */
+	SE05X_DEMO_ETH_WALLET_SIGN = 10,    /* 10: ETH legacy transfer RLP/Keccak/SE 签名 */
+	SE05X_DEMO_ETH_TESTNET_WALLET = 11, /* 11: ETH Sepolia persistent wallet key signing */
 } se05x_demo_id_t;
 
 #define SE05X_DEMO_OBJECT_ID_ECC_KEY 0xEF060001u
@@ -27,19 +28,20 @@ typedef enum {
 #define SE05X_DEMO_OBJECT_ID_ECC_PUB 0xEF060002u
 #define SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1 0xEF090001u
 #define SE05X_DEMO_OBJECT_ID_ETH_WALLET 0xEF100001u
+#define SE05X_DEMO_OBJECT_ID_ETH_TESTNET_WALLET 0xEF110001u
 #define SE05X_DEMO_ECC_KEY_BITS      256u
 
 typedef struct {
 	unsigned int pass; /* 必须成功且已经成功的检查数量 */
-	unsigned int fail; /* 必须成功但失败的检查数量，非 0 表示 demo 总体失败 */
+	unsigned int fail; /* 必须成功但失败的检查数量；非 0 表示 demo 失败 */
 	unsigned int skip; /* 可选能力或当前 OEF 不支持时跳过的检查数量 */
 	const char *tag;   /* 串口日志前缀，方便区分不同 demo */
 } se05x_demo_stats_t;
 
 typedef struct {
-	se05x_demo_id_t id;          /* main.c 里用于选择 demo 的编号 */
-	const char *name;            /* 短名称，串口日志里显示 */
-	const char *when_to_use;     /* 适合什么情况运行 */
+	se05x_demo_id_t id;          /* main.c 用于选择 demo 的编号 */
+	const char *name;            /* 短名称，串口日志中显示 */
+	const char *when_to_use;     /* 适合什么场景使用 */
 	const char *flow;            /* demo 的主要执行流程 */
 	const char *expected_output; /* 期望串口输出和通过条件 */
 	const char *se_features;     /* 用到的 SE05x 功能或 APDU 类别 */

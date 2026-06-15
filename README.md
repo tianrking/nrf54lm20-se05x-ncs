@@ -1,7 +1,7 @@
 # nRF54LM20 SE05x NCS
 
-> Nordic nRF Connect SDK 版本的 NXP SE05x bring-up 与安全芯片示例工程。  
-> 对应 ESP-IDF 版本：[esp32-se05x-idf](https://github.com/tianrking/esp32-se05x-idf)
+> 基于 Nordic NCS 3.3.0 / Zephyr OS 4.3.99 的 nRF54LM20 DK + NXP SE05x/SE052 安全芯片验证工程。
+> 对应 ESP32 版本：[esp32-se05x-idf](https://github.com/tianrking/esp32-se05x-idf)
 
 <p align="center">
   <img alt="Nordic NCS 3.3.0" src="https://img.shields.io/badge/Nordic%20NCS-3.3.0-00A9CE?style=for-the-badge">
@@ -17,75 +17,41 @@
   <img alt="CRACEN nrf_security" src="https://img.shields.io/badge/CRACEN-nrf__security-455A64?style=for-the-badge">
 </p>
 
-## 项目说明
+## 项目定位
 
-这个仓库用于验证 **nRF54LM20 通过 I2C 访问 NXP SE05x/SE052** 的完整基础链路：
+这个仓库验证 nRF54LM20 通过 I2C 访问 NXP SE05x/SE052 的完整链路：
 
-- Zephyr devicetree 绑定 SE05x I2C 节点。
-- NXP Plug & Trust hostlib 运行在 Nordic NCS/Zephyr 上。
-- 通过 T=1 over I2C 和 SE05x 通信。
-- 使用 Platform SCP03 建立安全会话。
-- 运行 UART 交互式安全 API 菜单、只读、写入型、TLS 身份和钱包研究 demo，覆盖版本、唯一 ID、随机数、对象状态、曲线列表、内存状态、ECC 签名、证书存储、TLS 客户端身份材料检查、secp256k1 能力探测和 ETH legacy 交易签名流程。
+- Zephyr devicetree 绑定 SE05x I2C 节点，默认 `i2c22`、地址 `0x48`、100 kHz。
+- NXP Plug & Trust hostlib 移植到 Nordic NCS / Zephyr。
+- 使用 T=1 over I2C 与 SE05x 通信。
+- 通过 Platform SCP03 建立安全会话。
+- 使用 SE05x APDU API 与 SSS API 完成只读探测、对象写入、证书保存、TLS 身份、secp256k1 能力验证、ETH 签名和 Sepolia 测试网交易签名。
 
-当前工程刻意不包含 OTA、Bluetooth、NFC、MCUBoot 等无关产品功能，重点放在 nRF54LM20 和 SE05x 的安全芯片链路。默认选择的 Demo 00 是 UART 交互式安全 API 菜单，只包含读、查、随机数、状态、容量这类不会写 SE05x NVM 的接口，适合逐条测试 API。需要一键完整冒烟测试时可切到 Demo 01。
-
-从 Demo 04 开始，工程加入真实业务流程 demo。Demo 04/05 覆盖设备注册、产测上报、应用 key/证书写入前预检；Demo 06/07/08 覆盖 SE 内 ECC 私钥签名、设备证书持久存储、TLS 客户端身份材料检查；Demo 09 用来研究当前 SE05x 是否能启用 BTC/ETH 常用的 secp256k1 曲线并完成 transient key 的 ECDSA sign/verify；Demo 10 在 Demo09 的基础上补齐 ETH legacy transfer 的 RLP、Keccak-256、地址推导、r/s/v 候选和 raw transaction 候选输出。Demo 06/07 会写固定 demo object ID，已有对象时不覆盖；Demo 08 不新写对象，只复用 06/07 的 key 和 cert；Demo 09/10 只有在 secp256k1 当前为 `NOT_SET` 时才会写一次曲线参数 NVM，测试私钥使用 transient object，不写 persistent 私钥。详细风险说明见 [demo/README.md](demo/README.md)。
-
-## 当前状态
-
-| 项目 | 状态 |
-| --- | --- |
-| J-Link 下载和 debug | 已验证 |
-| 串口日志 | 已验证 |
-| Zephyr I2C 绑定 | 已验证，默认 `i2c22`，地址 `0x48` |
-| SE05x ATR | 已验证 |
-| Platform SCP03 | 已验证 |
-| UART 交互式安全 API demo | 已实现并构建通过；默认运行 Demo 00 |
-| 只读 demo | 已验证，`pass=13 skip=1 fail=0` |
-| 写入型 demo | 已实现并构建通过；Demo 06/07 会写 demo object ID |
-| TLS 身份 demo | 已实现并构建通过；Demo 08 复用 Demo 06/07 的对象 |
-| 钱包曲线研究 demo | 已实现并构建通过；Demo 09 用于验证 secp256k1 曲线启用和 transient sign/verify，默认不运行 |
-| ETH 钱包签名 demo | 已实现并构建通过；Demo 10 用于验证 ETH legacy transfer 的 RLP/Keccak/SE 签名/地址推导链路，默认不运行 |
-| `ReadIDList sw=0xFFFF` | 当前按 skip 处理，不影响基础连通性结论 |
-
-## 串口输出和中文文档策略
-
-本工程采用“**文档和源码注释中文，串口运行时输出英文 ASCII**”的策略：
-
-- README、子目录 README、源码文件顶部注释使用中文，详细说明场景、流程、风险、API 入参和返回值。
-- 固件运行时通过 `LOG_INF()`、`LOG_ERR()`、`printk()` 输出到串口的内容统一使用英文 ASCII。
-- 这样做是为了避免不同串口工具、不同终端编码、不同系统区域设置导致中文 UTF-8 被显示成 `����`。
-- 如果后续新增 demo，中文解释应该写在 README 和源码注释里；串口菜单、错误提示、状态日志应继续保持英文 ASCII。
+当前默认运行 Demo11：`SE05X_DEMO_ETH_TESTNET_WALLET`。它会创建或复用 SE05x 内部持久化 secp256k1 钱包私钥对象 `0xEF110001`，输出稳定 ETH 地址，并支持通过串口接收真实交易字段后由 SE05x 签名。
 
 ## 文档入口
 
-根目录 README 只做项目总览和跳转。每个子模块的详细中文说明放在对应目录里：
-
 | 模块 | 文档 | 内容 |
 | --- | --- | --- |
-| API 参考 | [api/README.md](api/README.md) | 本工程实际使用 API 的作用、入参、输出参数、返回值和 demo 对应关系。 |
-| 应用入口 | [src/README.md](src/README.md) | `main.c` 的职责、demo 选择方式、debug 断点建议。 |
-| SE05x demo | [demo/README.md](demo/README.md) | 每个 demo 的场景、时序作用、预期输出和 Mermaid API 流程图。 |
-| 板级配置 | [boards/README.md](boards/README.md) | nRF54LM20 DK overlay、I2C 管脚、地址和排查方法。 |
-| bus 抽象层 | [se05x_bus/README.md](se05x_bus/README.md) | 平台无关 bus contract、Zephyr I2C backend 和调用链。 |
-| NXP hostlib 移植 | [nxp_se05x/README.md](nxp_se05x/README.md) | Plug & Trust 来源、目录职责、SCP03 profile、Zephyr porting 层。 |
-| PC 辅助工具 | [tools/README.md](tools/README.md) | Demo09 公钥、digest、signature 的 PC 侧独立验签脚本；Demo10 ETH RLP、Keccak、地址、签名和 raw tx 候选验证脚本。 |
+| 应用入口 | [src/README.md](src/README.md) | `main.c` 职责、demo 切换、调试断点建议。 |
+| Demo 集合 | [demo/README.md](demo/README.md) | Demo00-Demo11 的场景、NVM 风险、API 流程、钱包链路。 |
+| API 参考 | [api/README.md](api/README.md) | 本工程实际使用 API 的作用、参数、返回值、对应 demo。 |
+| 板级配置 | [boards/README.md](boards/README.md) | nRF54LM20 DK overlay、I2C 管脚、地址、排查方法。 |
+| bus 抽象 | [se05x_bus/README.md](se05x_bus/README.md) | 平台无关 bus contract 与 Zephyr I2C backend。 |
+| NXP hostlib | [nxp_se05x/README.md](nxp_se05x/README.md) | Plug & Trust 来源、目录职责、SCP03 profile、Zephyr porting 层。 |
+| PC 工具 | [tools/README.md](tools/README.md) | Demo09/Demo10/Demo11 的 PC 侧验证、Sepolia dry-run 与广播脚本。 |
 
-## 快速开始
-
-构建默认 nRF54LM20A cpuapp 目标：
+## 快速构建
 
 ```bat
 cd /d F:\nordic_prj\nrf54lm20_se05x
 build.cmd
 ```
 
-切换到 nRF54LM20B cpuapp：
+默认目标：
 
-```bat
-cd /d F:\nordic_prj\nrf54lm20_se05x
-set BOARD=nrf54lm20dk/nrf54lm20b/cpuapp
-build.cmd
+```text
+nrf54lm20dk/nrf54lm20a/cpuapp
 ```
 
 构建产物通常位于：
@@ -95,102 +61,66 @@ build_nrf54lm20_se05x/nrf54lm20_se05x/zephyr/zephyr.elf
 build_nrf54lm20_se05x/nrf54lm20_se05x/zephyr/zephyr.hex
 ```
 
-如果构建系统使用单应用目录，也可能位于：
+## Demo 总览
 
-```text
-build_nrf54lm20_se05x/zephyr/zephyr.elf
-build_nrf54lm20_se05x/zephyr/zephyr.hex
-```
+| 编号 | 宏 | 名称 | 主要用途 | NVM 风险 |
+| --- | --- | --- | --- | --- |
+| 00 | `SE05X_DEMO_UART_SAFE_API` | `uart_safe_api` | UART 交互式安全 API 菜单。 | 不写 |
+| 01 | `SE05X_DEMO_SAFE_READ_ONLY` | `safe_read_only` | 完整只读冒烟测试。 | 不写 |
+| 02 | `SE05X_DEMO_IDENTITY_RANDOM` | `identity_random` | 读取身份、UniqueID、随机数。 | 不写 |
+| 03 | `SE05X_DEMO_INVENTORY` | `inventory` | 查看能力、曲线、空间、对象状态。 | 不写 |
+| 04 | `SE05X_DEMO_BUSINESS_ONBOARDING` | `business_onboarding` | 设备注册/产测上报前置流程。 | 不写 |
+| 05 | `SE05X_DEMO_PROVISIONING_CHECK` | `provisioning_check` | 应用 key/证书写入前预检。 | 不写 |
+| 06 | `SE05X_DEMO_ECC_SIGN_VERIFY` | `ecc_sign_verify` | 写入 demo ECC key 并签名验签。 | 写 `0xEF060001` |
+| 07 | `SE05X_DEMO_CERTIFICATE_STORE` | `certificate_store` | 写入 demo 证书并回读校验。 | 写 `0xEF070001` |
+| 08 | `SE05X_DEMO_TLS_CLIENT_IDENTITY` | `tls_client_identity` | 复用 06/07 模拟 TLS 客户端身份。 | 不新写 |
+| 09 | `SE05X_DEMO_WALLET_CURVE_CHECK` | `wallet_curve_check` | 验证 secp256k1 曲线启用、生成临时 key、签名验签。 | 曲线未启用时写一次曲线参数 |
+| 10 | `SE05X_DEMO_ETH_WALLET_SIGN` | `eth_wallet_sign` | ETH legacy 交易 RLP/Keccak/临时 key 签名研究。 | 曲线未启用时写一次曲线参数 |
+| 11 | `SE05X_DEMO_ETH_TESTNET_WALLET` | `eth_testnet_wallet` | 使用 SE05x 持久化私钥签真实 Sepolia 交易字段。 | 写曲线参数和钱包 key |
 
-## 默认硬件
+## Demo11 Sepolia 测试网流程
 
-| 项目 | 默认值 |
-| --- | --- |
-| 开发板 | `nrf54lm20dk/nrf54lm20a/cpuapp` |
-| I2C 控制器 | `i2c22` |
-| SCL | `P1.11` |
-| SDA | `P1.12` |
-| SE05x 地址 | `0x48` |
-| I2C 速率 | `100 kHz` |
-| devicetree alias | `se05x` |
-
-硬件和 overlay 细节见 [boards/README.md](boards/README.md)。
-
-## 总体架构
+Demo11 不是模拟签名。签名动作发生在 SE05x 内部，PC 脚本只负责查询链上参数、把交易字段发给板子、验证板子输出、选择正确 raw transaction，并且只有显式加 `--broadcast` 才广播。
 
 ```mermaid
 flowchart TD
-    A["src/main.c"] --> B["demo/*.c"]
-    A --> C["se05x_bus 默认 bus"]
-    C --> D["se05x_bus Zephyr I2C backend"]
-    B --> E["NXP SSS API / SE05x APDU API"]
-    E --> F["NXP Plug & Trust hostlib"]
-    F --> G["T=1 over I2C"]
-    G --> D
-    D --> H["Zephyr I2C i2c22"]
-    H --> I["NXP SE05x / SE052"]
+    A["PC 脚本"] --> B["串口发送 AT+A"]
+    B --> C["Demo11 创建/复用 SE05x 私钥对象 0xEF110001"]
+    C --> D["输出稳定 ETH_FROM_ADDRESS"]
+    A --> E["RPC 查询 chainId / nonce / gasPrice"]
+    E --> F["串口写入 AT+N/G/L/T/V/C/D"]
+    F --> G["串口发送 AT+S"]
+    G --> H["nRF 组 RLP 并计算 Keccak-256"]
+    H --> I["SE05x 对 digest 做 secp256k1 ECDSA 签名"]
+    I --> J["输出 public key / address / r / s / raw tx candidates"]
+    J --> K["PC 验证签名并恢复地址选择 v"]
+    K --> L{"是否 --broadcast"}
+    L -->|否| M["只打印 raw tx，dry-run"]
+    L -->|是| N["eth_sendRawTransaction 广播到 Sepolia"]
 ```
 
-运行顺序概括：
+典型操作：
 
-1. `main.c` 创建 Zephyr I2C bus。
-2. 注册 `se05x_bus` 默认 transport。
-3. `ex_sss_boot_open()` 打开 SE05x session。
-4. Platform SCP03 完成安全认证。
-5. 根据 `APP_SELECTED_DEMO` 分发到 `demo/` 下的具体示例。
-6. demo 调用 NXP APDU/SSS API 和 SE05x 交互。
-7. demo 完成后关闭 session，主线程 sleep 方便串口和 debugger 保留现场。
-
-## Demo 选择
-
-当前 demo 由 [src/main.c](src/main.c) 中这个宏选择：
-
-```c
-#define APP_SELECTED_DEMO SE05X_DEMO_UART_SAFE_API
+```bat
+python tools\broadcast_demo11_sepolia_tx.py --port COM9 --to 0x接收地址 --value-wei 100000000000000 --save-log demo11.log
 ```
 
-可选值：
+确认地址、金额、nonce、gasPrice 都正确，并且 `SELECTED_RAW_TX` 正常后，再显式广播：
 
-| 宏 | 对应 demo | 说明 |
-| --- | --- | --- |
-| `SE05X_DEMO_UART_SAFE_API` | Demo 00 | UART 交互式安全 API 菜单，逐条测试本工程安全 APDU 接口。 |
-| `SE05X_DEMO_SAFE_READ_ONLY` | Demo 01 | 完整只读冒烟测试，首次 bring-up 推荐。 |
-| `SE05X_DEMO_IDENTITY_RANDOM` | Demo 02 | 快速读取身份和随机数。 |
-| `SE05X_DEMO_INVENTORY` | Demo 03 | 查看能力、对象、曲线和空间状态。 |
-| `SE05X_DEMO_BUSINESS_ONBOARDING` | Demo 04 | 真实设备注册/产测上报前置流程。 |
-| `SE05X_DEMO_PROVISIONING_CHECK` | Demo 05 | 应用 key/证书写入前业务预检流程。 |
-| `SE05X_DEMO_ECC_SIGN_VERIFY` | Demo 06 | 写入/复用 demo ECC 私钥，做 SE 内签名和公钥验签。 |
-| `SE05X_DEMO_CERTIFICATE_STORE` | Demo 07 | 写入/复用 demo 设备证书对象，并回读校验。 |
-| `SE05X_DEMO_TLS_CLIENT_IDENTITY` | Demo 08 | 读取证书并用 SE 内私钥签名 TLS handshake digest。 |
-| `SE05X_DEMO_WALLET_CURVE_CHECK` | Demo 09 | 研究 secp256k1 曲线能否启用，并用 transient key 做 ECDSA sign/verify。 |
-| `SE05X_DEMO_ETH_WALLET_SIGN` | Demo 10 | 演示 ETH legacy transfer 从交易字段、RLP、Keccak 到 SE05x secp256k1 签名和 raw tx 候选输出。 |
-
-每个 demo 的详细流程见 [demo/README.md](demo/README.md)。
-
-## 典型成功日志
-
-```text
-*** Booting nRF Connect SDK v3.3.0-ba167d9f3db4 ***
-*** Using Zephyr OS v4.3.99-fd9204a02d52 ***
-SE05x I2C ready: bus=i2c@c8000 addr=0x48
-sss :INFO :atr (Len=35)
-sss :INFO :Newer version of Applet Found
-sss :INFO :Compiled for 0x70200. Got newer 0x70216
-SAFE_TEST summary: pass=13 skip=1 fail=0
-SAFE_TEST overall OK
+```bat
+python tools\broadcast_demo11_sepolia_tx.py --port COM9 --to 0x接收地址 --value-wei 100000000000000 --broadcast
 ```
+
+重要安全边界：
+
+- SE05x 私钥对象 `0xEF110001` 不导出、不打印，掉电后仍保留。
+- `AT+X=DELETE_TESTNET_KEY` 会删除 Demo11 钱包 key，删除后地址会变化，除非你有备份/恢复设计，否则不要随便执行。
+- Demo11 当前是研究级测试网流程，不包含屏幕确认、PIN、反钓鱼、固件防回滚、交易白名单、多链派生路径等生产钱包必须能力。
 
 ## 和 ESP32 版本的关系
 
-这个仓库是 [esp32-se05x-idf](https://github.com/tianrking/esp32-se05x-idf) 的 Nordic/NCS 平台版本。
-
-两个仓库的设计目标一致：
-
-- 共享 NXP Plug & Trust hostlib 思路。
-- 共享 `se05x_bus` 这种平台无关 transport contract。
-- 每个平台只替换自己的 I2C、timer、reset、mutex、heap 和 host crypto 后端。
-- demo 编号和使用场景尽量保持可对照。
+本仓库是 [esp32-se05x-idf](https://github.com/tianrking/esp32-se05x-idf) 的 Nordic/NCS 平台版本。两个仓库的目标一致：验证 SE05x 安全芯片链路，并保持 demo 编号、业务场景、bus 抽象思路尽量可对照。
 
 ## 许可说明
 
-仓库中 `nxp_se05x/nxp/plug-and-trust/` 保留 NXP Plug & Trust 原始文件和许可说明。使用、分发或商用前请同时确认本工程代码和 NXP 原始组件的许可要求。
+`nxp_se05x/nxp/plug-and-trust/` 保留 NXP Plug & Trust 原始文件和许可说明。使用、分发或商用前，请同时确认本工程代码和 NXP 原始组件的许可要求。

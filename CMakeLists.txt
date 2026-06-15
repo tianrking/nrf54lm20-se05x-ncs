@@ -111,6 +111,7 @@ target_sources(app PRIVATE
     demo/se05x_demo_08_tls_client_identity.c
     demo/se05x_demo_09_wallet_curve_check.c
     demo/se05x_demo_10_eth_wallet_sign.c
+    demo/se05x_demo_11_eth_testnet_wallet.c
 )
 
 target_include_directories(app PRIVATE demo)

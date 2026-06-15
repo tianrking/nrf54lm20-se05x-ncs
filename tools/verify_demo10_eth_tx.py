@@ -417,7 +417,7 @@ def capture_from_serial(
             if data:
                 chunks.append(data)
                 text = b"".join(chunks).decode("utf-8", errors="replace")
-                if "se05x-eth-demo>" in text:
+                if "se05x-eth-demo>" in text or "se05x-eth-testnet>" in text:
                     return text
 
         return b"".join(chunks).decode("utf-8", errors="replace")
