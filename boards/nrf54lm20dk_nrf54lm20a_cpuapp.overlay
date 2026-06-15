@@ -1,0 +1,40 @@
+#include <zephyr/dt-bindings/i2c/i2c.h>
+
+/ {
+	aliases {
+		se05x = &se05x;
+	};
+};
+
+&pinctrl {
+	i2c22_default: i2c22_default {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SCL, 1, 11)>,
+				<NRF_PSEL(TWIM_SDA, 1, 12)>;
+			bias-pull-up;
+		};
+	};
+
+	i2c22_sleep: i2c22_sleep {
+		group1 {
+			psels = <NRF_PSEL(TWIM_SCL, 1, 11)>,
+				<NRF_PSEL(TWIM_SDA, 1, 12)>;
+			low-power-enable;
+		};
+	};
+};
+
+&i2c22 {
+	status = "okay";
+	clock-frequency = <I2C_BITRATE_STANDARD>;
+	zephyr,concat-buf-size = <512>;
+	pinctrl-0 = <&i2c22_default>;
+	pinctrl-1 = <&i2c22_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	se05x: se05x@48 {
+		compatible = "nxp,se05x";
+		status = "okay";
+		reg = <0x48>;
+	};
+};

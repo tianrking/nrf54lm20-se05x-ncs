@@ -1,0 +1,9 @@
+build*/
+.build_tmp/
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+*.log
+env.local.cmd

@@ -1,0 +1,10 @@
+idf_component_register(
+    SRCS
+        "src/se05x_bus.c"
+        "src/se05x_bus_esp_idf_i2c.c"
+    INCLUDE_DIRS
+        "include"
+    REQUIRES
+        esp_driver_i2c
+        esp_timer
+)

@@ -1,0 +1,48 @@
+menu "NXP SE05x bus"
+
+    config SE05X_I2C_PORT
+        int "ESP-IDF I2C controller"
+        range 0 1
+        default 0
+        help
+            ESP32-H2 has one commonly used I2C controller in most designs.
+            Keep this at 0 unless your target exposes another controller.
+
+    config SE05X_I2C_SDA_GPIO
+        int "SE05x I2C SDA GPIO"
+        range 0 27
+        default 2
+
+    config SE05X_I2C_SCL_GPIO
+        int "SE05x I2C SCL GPIO"
+        range 0 27
+        default 3
+
+    config SE05X_I2C_ADDR
+        hex "SE05x 7-bit I2C address"
+        range 0x08 0x77
+        default 0x48
+
+    config SE05X_I2C_FREQ_HZ
+        int "SE05x I2C clock in Hz"
+        range 10000 1000000
+        default 100000
+
+    config SE05X_I2C_TIMEOUT_MS
+        int "SE05x I2C transaction timeout in ms"
+        range 10 5000
+        default 1000
+
+    config SE05X_I2C_INTERNAL_PULLUPS
+        bool "Enable ESP32 internal SDA/SCL pull-ups"
+        default y
+        help
+            Internal pull-ups make quick bring-up easier. For reliable hardware,
+            still place external pull-ups on SDA and SCL.
+
+    config SE05X_RST_GPIO
+        int "Optional SE05x reset/enable GPIO (-1 disables)"
+        range -1 27
+        default -1
+
+endmenu
