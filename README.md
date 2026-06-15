@@ -68,6 +68,7 @@
 | 板级配置 | [boards/README.md](boards/README.md) | nRF54LM20 DK overlay、I2C 管脚、地址和排查方法。 |
 | bus 抽象层 | [se05x_bus/README.md](se05x_bus/README.md) | 平台无关 bus contract、Zephyr I2C backend 和调用链。 |
 | NXP hostlib 移植 | [nxp_se05x/README.md](nxp_se05x/README.md) | Plug & Trust 来源、目录职责、SCP03 profile、Zephyr porting 层。 |
+| PC 辅助工具 | [tools/README.md](tools/README.md) | Demo09 公钥、digest、signature 的 PC 侧独立验签脚本。 |
 
 ## 快速开始
 
