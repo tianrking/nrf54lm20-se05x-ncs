@@ -26,7 +26,7 @@
 | 06 | `se05x_demo_06_ecc_sign_verify.c` | `ecc_sign_verify` | SE 内 ECC 私钥签名、外部公钥验签。 | 是，写 `0xEF060001` |
 | 07 | `se05x_demo_07_certificate_store.c` | `certificate_store` | 设备证书对象写入、回读和内容校验。 | 是，写 `0xEF070001` |
 | 08 | `se05x_demo_08_tls_client_identity.c` | `tls_client_identity` | TLS 客户端身份材料检查和 handshake digest 签名。 | 否，复用 06/07 |
-| 09 | `se05x_demo_09_wallet_curve_check.c` | `wallet_curve_check` | 验证 secp256k1 曲线能否启用，并用 transient key 做 ECDSA sign/verify。 | 可能写：仅在 secp256k1 为 `NOT_SET` 时写曲线参数；会清理 Demo09 专用测试 ID `0xEF090001` |
+| 09 | `se05x_demo_09_wallet_curve_check.c` | `wallet_curve_check` | 验证 secp256k1 曲线能否启用，并用 UART AT 命令反复做 transient key、公钥输出、ECDSA sign/verify。 | 可能写：仅在 secp256k1 为 `NOT_SET` 时写曲线参数；会清理 Demo09 专用测试 ID `0xEF090001` |
 
 ## 代码对应关系
 
@@ -760,6 +760,16 @@ Demo tls_client_identity 总体结果：OK
 
 它不是完整 BTC/ETH 钱包 demo。它不解析 BTC transaction，不计算 double-SHA256，不做 Ethereum Keccak，不派生地址，不生成 recovery id，也不处理 low-S 规范化。它只验证最底层的 SE 能力：`secp256k1` 曲线是否能启用、SE 内是否能生成该曲线 key、是否能对 32 字节 digest 做 ECDSA sign/verify。
 
+Demo 09 启动后会自动跑一次完整验证，然后停在串口 AT 文本菜单，便于你不重烧固件反复测试。
+
+| 命令 | 作用 | 是否可能写 NVM |
+| --- | --- | --- |
+| `AT+H` | 打印 Demo09 菜单。 | 否 |
+| `AT+R` | 完整验证：检查曲线；如果 `NOT_SET` 则创建 secp256k1 曲线；生成 transient key；输出公钥、digest、签名；SE 内验签。 | 可能，仅当 secp256k1 尚未创建时写曲线参数；同时会清理 `0xEF090001` 测试对象 |
+| `AT+C` | 只读取曲线列表，判断 `Secp256k1=SET/NOT_SET`。 | 否 |
+| `AT+S` | 不创建曲线，只要求当前曲线已经 `SET`，然后生成 transient key、输出公钥、签名并验签。 | 会清理 Demo09 专用测试对象 `0xEF090001` |
+| `AT+Q` | 退出 Demo09，main 关闭 SE05x session。 | 否 |
+
 ### NVM 风险边界
 
 | 项目 | 说明 |
@@ -808,6 +818,12 @@ flowchart TD
     P --> Q["输出 DIGEST_SHA256_INPUT / SIGNATURE_DER"]
     Q --> R["sss_asymmetric_verify_digest"]
     R --> S["summary"]
+    S --> T["UART AT menu"]
+    T --> U{"用户输入命令"}
+    U -->|"AT+R"| A
+    U -->|"AT+C"| V["ReadECCurveList only"]
+    U -->|"AT+S"| W["要求 Secp256k1 已 SET，然后 generate/sign/verify"]
+    U -->|"AT+Q"| X["return to main, close SE session"]
 ```
 
 ### 结果怎么判断
@@ -846,6 +862,13 @@ SIGNATURE_DER len=...
 SAFE_TEST PASS SignDigest(SECP256K1)
 SAFE_TEST PASS VerifyDigest(SECP256K1)
 WALLET_CURVE_CHECK summary: pass=... skip=0 fail=0
+
+========== SE05x Demo 09: Wallet curve check ==========
+AT+H : Show this menu
+AT+R : Run full wallet probe: curve + transient key + public key + sign/verify
+AT+C : Check secp256k1 curve status only
+AT+S : Generate transient secp256k1 key, print public key, sign and verify
+AT+Q : Quit Demo 09 and close SE05x session
 ```
 
 ## 写入型 demo 安全说明

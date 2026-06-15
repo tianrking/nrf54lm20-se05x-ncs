@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <zephyr/console/console.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/printk.h>
 
@@ -14,6 +15,8 @@
 #include "se05x_enums.h"
 
 LOG_MODULE_REGISTER(se05x_demo_wallet_curve, LOG_LEVEL_INF);
+
+#define WALLET_UART_CMD_MAX_LEN 16U
 
 /*
  * Demo 09: wallet_curve_check.
@@ -42,6 +45,11 @@ LOG_MODULE_REGISTER(se05x_demo_wallet_curve, LOG_LEVEL_INF);
  * - 如果曲线 SET、transient key generate、sign/verify 都成功，说明 SE 原生
  *   secp256k1 ECDSA 基础链路成立。BTC/ETH 仍需补交易解析、hash、地址、公钥导出、
  *   DER/r|s 转换、low-S、Ethereum recovery id 等钱包协议层。
+ *
+ * 串口交互：
+ *   为了现场反复验证，本 demo 启动后会自动跑一次完整测试，然后停在 AT 文本菜单。
+ *   输入 AT+R 可以再次完整运行；AT+C 只检查曲线；AT+S 只生成 transient key 并输出
+ *   公钥、digest、signature。串口输出使用英文 ASCII，避免串口工具中文编码问题。
  */
 
 static uint8_t k_wallet_digest[32] = {
@@ -50,6 +58,105 @@ static uint8_t k_wallet_digest[32] = {
 	0x2d, 0x44, 0x45, 0x4d, 0x4f, 0x2d, 0x30, 0x39,
 	0x2d, 0x44, 0x49, 0x47, 0x45, 0x53, 0x54, 0x21,
 };
+
+static int wallet_normalize_command_char(int ch)
+{
+	if (ch >= 'A' && ch <= 'Z') {
+		return ch + ('a' - 'A');
+	}
+
+	return ch;
+}
+
+static bool wallet_is_line_end(int ch)
+{
+	return ch == '\r' || ch == '\n';
+}
+
+static bool wallet_is_known_command(int cmd)
+{
+	return cmd == 'h' || cmd == 'r' || cmd == 'c' || cmd == 's' || cmd == 'q';
+}
+
+static int wallet_parse_at_command(const char *line, size_t len)
+{
+	size_t start = 0;
+	size_t end = len;
+
+	while (start < end && line[start] == ' ') {
+		++start;
+	}
+	while (end > start && line[end - 1U] == ' ') {
+		--end;
+	}
+
+	if (end - start != 4U) {
+		return -1;
+	}
+
+	const char a = line[start];
+	const char t = line[start + 1U];
+	if (!((a == 'A' || a == 'a') && (t == 'T' || t == 't') &&
+	      line[start + 2U] == '+')) {
+		return -1;
+	}
+
+	const int cmd = wallet_normalize_command_char(line[start + 3U]);
+	if (!wallet_is_known_command(cmd)) {
+		return -1;
+	}
+
+	return cmd;
+}
+
+static int wallet_read_uart_command(void)
+{
+	char line[WALLET_UART_CMD_MAX_LEN] = { 0 };
+	size_t len = 0;
+
+	while (1) {
+		int ch = console_getchar();
+
+		if (wallet_is_line_end(ch)) {
+			if (len == 0U) {
+				continue;
+			}
+
+			return wallet_parse_at_command(line, len);
+		}
+
+		if ((ch == '\b' || ch == 0x7F) && len > 0U) {
+			line[--len] = '\0';
+			continue;
+		}
+
+		if (len >= sizeof(line) - 1U) {
+			len = 0;
+			return -1;
+		}
+
+		line[len++] = (char)ch;
+		line[len] = '\0';
+
+		const int cmd = wallet_parse_at_command(line, len);
+		if (cmd >= 0) {
+			return cmd;
+		}
+	}
+}
+
+static void wallet_print_menu(void)
+{
+	printk("\n========== SE05x Demo 09: Wallet curve check ==========\n");
+	printk("AT+H : Show this menu\n");
+	printk("AT+R : Run full wallet probe: curve + transient key + public key + sign/verify\n");
+	printk("AT+C : Check secp256k1 curve status only\n");
+	printk("AT+S : Generate transient secp256k1 key, print public key, sign and verify\n");
+	printk("AT+Q : Quit Demo 09 and close SE05x session\n");
+	printk("Private key policy: never exported, never printed. Only public key/signature are printed.\n");
+	printk("NVM policy: AT+R may create secp256k1 curve once if it is NOT_SET; AT+S cleans only 0xEF090001.\n");
+	printk("=======================================================\n\n");
+}
 
 static void wallet_print_hex_block(const char *label, const uint8_t *data, size_t data_len)
 {
@@ -193,6 +300,26 @@ static void ensure_secp256k1_curve(se05x_demo_stats_t *stats, pSe05xSession_t se
 	}
 }
 
+static bool curve_is_ready(se05x_demo_stats_t *stats, pSe05xSession_t se_session,
+			   const char *step_name)
+{
+	bool is_set = false;
+	smStatus_t sw = read_secp256k1_status(se_session, &is_set);
+
+	if (sw != SM_OK) {
+		se05x_demo_mark_fail_sw(stats, step_name, sw);
+		return false;
+	}
+
+	if (!is_set) {
+		se05x_demo_mark_fail_sw(stats, "Secp256k1NOT_SET", SM_NOT_OK);
+		return false;
+	}
+
+	se05x_demo_mark_pass(stats, "Secp256k1SET");
+	return true;
+}
+
 static bool delete_wallet_test_object_if_exists(se05x_demo_stats_t *stats,
 						pSe05xSession_t se_session,
 						const char *phase)
@@ -317,7 +444,7 @@ cleanup:
 	(void)delete_wallet_test_object_if_exists(stats, se_session, "after test");
 }
 
-static sss_status_t run_wallet_curve_check(ex_sss_boot_ctx_t *boot_ctx)
+static sss_status_t run_wallet_probe_once(ex_sss_boot_ctx_t *boot_ctx)
 {
 	se05x_demo_stats_t stats;
 	sss_se05x_session_t *session = (sss_se05x_session_t *)&boot_ctx->session;
@@ -338,12 +465,78 @@ static sss_status_t run_wallet_curve_check(ex_sss_boot_ctx_t *boot_ctx)
 	return se05x_demo_stats_result(&stats);
 }
 
+static sss_status_t run_wallet_curve_only(ex_sss_boot_ctx_t *boot_ctx)
+{
+	se05x_demo_stats_t stats;
+	sss_se05x_session_t *session = (sss_se05x_session_t *)&boot_ctx->session;
+	pSe05xSession_t se_session = &session->s_ctx;
+
+	se05x_demo_stats_init(&stats, "WALLET_CURVE_ONLY");
+	(void)curve_is_ready(&stats, se_session, "ReadECCurveList");
+	se05x_demo_log_summary(&stats);
+
+	return se05x_demo_stats_result(&stats);
+}
+
+static sss_status_t run_wallet_sign_only(ex_sss_boot_ctx_t *boot_ctx)
+{
+	se05x_demo_stats_t stats;
+	sss_se05x_session_t *session = (sss_se05x_session_t *)&boot_ctx->session;
+	pSe05xSession_t se_session = &session->s_ctx;
+
+	se05x_demo_stats_init(&stats, "WALLET_SIGN_ONLY");
+	if (curve_is_ready(&stats, se_session, "ReadECCurveList")) {
+		generate_transient_key_and_sign(&stats, boot_ctx, se_session);
+	}
+
+	se05x_demo_log_summary(&stats);
+	return se05x_demo_stats_result(&stats);
+}
+
+static sss_status_t run_wallet_curve_check(ex_sss_boot_ctx_t *boot_ctx)
+{
+	sss_status_t last_status;
+
+	last_status = run_wallet_probe_once(boot_ctx);
+	wallet_print_menu();
+
+	while (1) {
+		printk("se05x-wallet-demo> ");
+		const int cmd = wallet_read_uart_command();
+
+		switch (cmd) {
+		case 'h':
+			printk("\nCMD AT+H -> Show menu\n");
+			wallet_print_menu();
+			break;
+		case 'r':
+			printk("\nCMD AT+R -> Run full wallet probe\n");
+			last_status = run_wallet_probe_once(boot_ctx);
+			break;
+		case 'c':
+			printk("\nCMD AT+C -> Check secp256k1 curve status\n");
+			last_status = run_wallet_curve_only(boot_ctx);
+			break;
+		case 's':
+			printk("\nCMD AT+S -> Generate transient key, print public key, sign and verify\n");
+			last_status = run_wallet_sign_only(boot_ctx);
+			break;
+		case 'q':
+			printk("\nCMD AT+Q -> Quit Demo 09\n");
+			return last_status;
+		default:
+			printk("\nUnknown command. Type AT+H for help.\n");
+			break;
+		}
+	}
+}
+
 const se05x_demo_t g_se05x_demo_wallet_curve_check = {
 	.id = SE05X_DEMO_WALLET_CURVE_CHECK,
 	.name = "wallet_curve_check",
 	.when_to_use = "Research whether this SE05x can enable secp256k1 for BTC/ETH-style wallets.",
-	.flow = "Read curve list, create secp256k1 if needed, then generate transient key and sign/verify.",
-	.expected_output = "Secp256k1 SET, transient key generated, ECDSA signature preview, final fail=0.",
+	.flow = "Auto-run once, then accept AT commands for curve check and transient sign/verify.",
+	.expected_output = "Secp256k1 SET, public key, digest, DER signature, verify PASS, final fail=0.",
 	.se_features = "NVM curve creation, EC_NIST_K/secp256k1 transient key, ECDSA sign/verify.",
 	.run = run_wallet_curve_check,
 };
