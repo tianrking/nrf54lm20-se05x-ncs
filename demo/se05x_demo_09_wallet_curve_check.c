@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/printk.h>
 
 #include "fsl_sss_se05x_types.h"
 #include "se05x_APDU.h"
@@ -49,6 +50,84 @@ static uint8_t k_wallet_digest[32] = {
 	0x2d, 0x44, 0x45, 0x4d, 0x4f, 0x2d, 0x30, 0x39,
 	0x2d, 0x44, 0x49, 0x47, 0x45, 0x53, 0x54, 0x21,
 };
+
+static void wallet_print_hex_block(const char *label, const uint8_t *data, size_t data_len)
+{
+	printk("%s len=%u hex=", label, (unsigned int)data_len);
+	for (size_t i = 0; i < data_len; i++) {
+		if (i > 0U && (i % 16U) == 0U) {
+			printk("\n  ");
+		}
+		printk("%02X", data[i]);
+		if ((i + 1U) < data_len) {
+			printk(" ");
+		}
+	}
+	printk("\n");
+}
+
+static const uint8_t *wallet_find_uncompressed_ec_point(const uint8_t *key,
+							size_t key_len,
+							size_t *point_len)
+{
+	const uint8_t *point = NULL;
+
+	/*
+	 * SSS get_key() returns the EC public key with a DER header for SE05x.
+	 * The wallet-usable secp256k1 public key is the uncompressed point:
+	 * 0x04 || X(32 bytes) || Y(32 bytes).
+	 */
+	for (size_t i = 0; (i + 65U) <= key_len; i++) {
+		if (key[i] == 0x04U) {
+			point = &key[i];
+		}
+	}
+
+	if (point != NULL) {
+		*point_len = 65U;
+	}
+
+	return point;
+}
+
+static bool dump_wallet_public_key(se05x_demo_stats_t *stats,
+				   ex_sss_boot_ctx_t *boot_ctx,
+				   sss_object_t *wallet_key)
+{
+	uint8_t public_key[160] = { 0 };
+	size_t public_key_len = sizeof(public_key);
+	size_t public_key_bits = 0U;
+	size_t point_len = 0U;
+	const uint8_t *point;
+	sss_status_t status;
+
+	/*
+	 * 读取 key pair object 时，SE05x/APDU 只返回公钥部分。
+	 * 私钥不会导出；如果尝试读纯 private key/symmetric key，SE05x 会拒绝。
+	 */
+	status = sss_key_store_get_key(&boot_ctx->ks, wallet_key, public_key,
+				       &public_key_len, &public_key_bits);
+	if (status != kStatus_SSS_Success) {
+		se05x_demo_mark_fail_status(stats, "GetPublicKey(SECP256K1)", status);
+		return false;
+	}
+
+	printk("\nWallet verification material exported from Demo09:\n");
+	wallet_print_hex_block("PUBLIC_KEY_DER", public_key, public_key_len);
+
+	point = wallet_find_uncompressed_ec_point(public_key, public_key_len, &point_len);
+	if (point == NULL) {
+		se05x_demo_mark_fail_sw(stats, "ExtractPublicKey04XY", SM_NOT_OK);
+		return false;
+	}
+
+	wallet_print_hex_block("PUBLIC_KEY_UNCOMPRESSED_04XY", point, point_len);
+	wallet_print_hex_block("PUBLIC_KEY_X", &point[1], 32U);
+	wallet_print_hex_block("PUBLIC_KEY_Y", &point[33], 32U);
+	se05x_demo_mark_pass(stats, "GetPublicKey(SECP256K1)");
+
+	return true;
+}
 
 static bool curve_status_is_set(const uint8_t *curve_list, size_t curve_list_len,
 				SE05x_ECCurve_t curve_id)
@@ -190,6 +269,10 @@ static void generate_transient_key_and_sign(se05x_demo_stats_t *stats,
 	}
 	se05x_demo_mark_pass(stats, "GenerateKey(SECP256K1_TRANSIENT)");
 
+	if (!dump_wallet_public_key(stats, boot_ctx, &wallet_key)) {
+		goto cleanup;
+	}
+
 	status = sss_asymmetric_context_init(&sign_ctx, &boot_ctx->session, &wallet_key,
 					     kAlgorithm_SSS_SHA256, kMode_SSS_Sign);
 	if (status != kStatus_SSS_Success) {
@@ -203,7 +286,9 @@ static void generate_transient_key_and_sign(se05x_demo_stats_t *stats,
 		se05x_demo_mark_fail_status(stats, "SignDigest(SECP256K1)", status);
 		goto cleanup;
 	}
-	se05x_demo_log_hex_preview("Secp256k1Signature", signature, signature_len);
+	wallet_print_hex_block("DIGEST_SHA256_INPUT", k_wallet_digest, sizeof(k_wallet_digest));
+	wallet_print_hex_block("SIGNATURE_DER", signature, signature_len);
+	se05x_demo_log_hex_preview("Secp256k1SignaturePreview", signature, signature_len);
 	se05x_demo_mark_pass(stats, "SignDigest(SECP256K1)");
 
 	status = sss_asymmetric_context_init(&verify_ctx, &boot_ctx->session, &wallet_key,

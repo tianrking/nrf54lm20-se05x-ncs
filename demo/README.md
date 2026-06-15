@@ -766,7 +766,8 @@ Demo tls_client_identity 总体结果：OK
 | --- | --- |
 | 曲线参数 | 如果 Demo 00/`AT+B` 显示 `Secp256k1 : NOT_SET`，Demo 09 会调用 `Se05x_API_CreateCurve_secp256k1()`，这会写 SE05x persistent NVM。 |
 | 重复运行 | 如果 secp256k1 已经是 `SET`，Demo 09 不重复创建曲线。 |
-| 测试私钥 | 使用 `kKeyObject_Mode_Transient`，object ID 为 `0xEF090001`，不写 persistent 私钥内容。注意 SE05x transient object 的对象属性/ID 可能仍会保留，因此 demo 会清理自己的测试 ID。 |
+| 测试私钥 | 使用 `kKeyObject_Mode_Transient`，object ID 为 `0xEF090001`，不写 persistent 私钥内容。私钥只在 SE 内参与签名，不会通过串口或 APDU 导出。注意 SE05x transient object 的对象属性/ID 可能仍会保留，因此 demo 会清理自己的测试 ID。 |
+| 测试公钥 | Demo 09 会在生成测试 key 后调用 `sss_key_store_get_key()` 读取 key pair 的公钥部分，并输出 `PUBLIC_KEY_DER`、`PUBLIC_KEY_UNCOMPRESSED_04XY`、`PUBLIC_KEY_X`、`PUBLIC_KEY_Y`。这些值可以给 PC/手机端做独立验签和地址推导实验。 |
 | 删除动作 | Demo 09 不删除曲线、不 DeleteAll、不改生命周期、不改 policy；只会对保留的 Demo09 测试对象 `0xEF090001` 调用 `Se05x_API_DeleteSecureObject()`，避免重复运行时因为测试 ID 残留而失败。 |
 | 风险最高的内容 | 生产环境真正必须备份和管控的是 SCP03 管理 key、object ID 映射、策略、证书/公钥登记记录。曲线参数本身不是业务私钥，但它会占用/改变 SE 的 persistent 配置。 |
 
@@ -779,6 +780,7 @@ Demo tls_client_identity 总体结果：OK
 | 测试 object ID 清理 | `Se05x_API_CheckObjectExists()` / `Se05x_API_DeleteSecureObject()` | `delete_wallet_test_object_if_exists()` | 只检查和清理 Demo09 保留测试 ID `0xEF090001`，不会碰其他业务对象。 |
 | transient key 句柄 | `sss_key_object_allocate_handle()` | `generate_transient_key_and_sign()` | 分配 `kSSS_CipherType_EC_NIST_K`、`kSSS_KeyPart_Pair`、`kKeyObject_Mode_Transient` 的测试 key handle。 |
 | SE 内生成测试 key | `sss_key_store_generate_key()` | `generate_transient_key_and_sign()` | 在 SE 内生成 secp256k1 测试私钥，私钥不导出。 |
+| 导出测试公钥 | `sss_key_store_get_key()` / `Se05x_API_ReadObject()` | `dump_wallet_public_key()` | 对 key pair object 读取公钥部分。SE05x 文档定义：读 key pair 返回公钥，读 private/symmetric key 会被拒绝。 |
 | SE 内签名 | `sss_asymmetric_sign_digest()` | `generate_transient_key_and_sign()` | 对固定 32 字节 digest 生成 ECDSA signature。 |
 | 验证签名 | `sss_asymmetric_verify_digest()` | `generate_transient_key_and_sign()` | 验证生成的签名和测试 key 匹配，证明 sign/verify 链路成立。 |
 
@@ -800,9 +802,12 @@ flowchart TD
     J -->|no| L["allocate_handle EC_NIST_K transient"]
     K --> L
     L --> M["sss_key_store_generate_key 256-bit"]
-    M --> N["sss_asymmetric_sign_digest"]
-    N --> O["sss_asymmetric_verify_digest"]
-    O --> P["summary"]
+    M --> N["sss_key_store_get_key 读取公钥"]
+    N --> O["输出 PUBLIC_KEY_DER / 04XY / X / Y"]
+    O --> P["sss_asymmetric_sign_digest"]
+    P --> Q["输出 DIGEST_SHA256_INPUT / SIGNATURE_DER"]
+    Q --> R["sss_asymmetric_verify_digest"]
+    R --> S["summary"]
 ```
 
 ### 结果怎么判断
@@ -811,8 +816,9 @@ flowchart TD
 | --- | --- |
 | `CreateCurve_secp256k1` 失败 | 当前 OEF、权限或 applet 配置不允许应用侧启用 secp256k1；这颗 SE 当前不能直接走 SE 原生 BTC/ETH secp256k1 私钥签名。 |
 | 曲线 `SET` 但 `GenerateKey` 失败 | 曲线列表能打开，但 SSS key generation 或 EC_NIST_K 映射仍不可用，需要继续查 hostlib 和 applet 权限。 |
+| `GetPublicKey` 失败 | SE 可以生成 key，但当前对象策略、对象类型或 hostlib 映射不允许读取公钥。钱包地址推导还不能直接做，需要继续排查。 |
 | `GenerateKey` 成功但 `SignDigest` 失败 | key 可以生成，但签名链路不可用，仍不能作为钱包签名根能力。 |
-| `SignDigest` 和 `VerifyDigest` 都成功 | SE 原生 secp256k1 ECDSA 基础链路成立。下一步才能做 BTC/ETH 钱包协议层。 |
+| `GetPublicKey`、`SignDigest` 和 `VerifyDigest` 都成功 | SE 原生 secp256k1 ECDSA 基础链路成立，并且可以拿到公钥用于地址推导和外部验签。下一步才能做 BTC/ETH 钱包协议层。 |
 | `DeleteSecureObject(WALLET_TEST_KEY)` 失败 | Demo09 专用测试 ID 无法清理，通常说明当前对象权限、session 或 SE 状态不允许删除；不要改成 DeleteAll，先单独排查该 object ID。 |
 
 ### 如果成功，BTC/ETH 是否就完美了
@@ -833,7 +839,10 @@ Secp256k1 is NOT_SET; creating curve will write SE05x persistent NVM once
 SAFE_TEST PASS CreateCurve_secp256k1
 ReadECCurveList len=17 Secp256k1=SET
 SAFE_TEST PASS GenerateKey(SECP256K1_TRANSIENT)
-Secp256k1Signature len=...
+PUBLIC_KEY_DER len=...
+PUBLIC_KEY_UNCOMPRESSED_04XY len=65 hex=04 ...
+DIGEST_SHA256_INPUT len=32 hex=...
+SIGNATURE_DER len=...
 SAFE_TEST PASS SignDigest(SECP256K1)
 SAFE_TEST PASS VerifyDigest(SECP256K1)
 WALLET_CURVE_CHECK summary: pass=... skip=0 fail=0

@@ -818,7 +818,7 @@ void sss_asymmetric_context_free(sss_asymmetric_t *context);
 | `sss_key_object_get_handle()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 否 |
 | `sss_key_store_set_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 是，写 ECC key | 是，写 cert | 否 | 否 |
 | `sss_key_store_generate_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，SE 内生成 transient key |
-| `sss_key_store_get_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，读 cert | 是，读 cert | 否 |
+| `sss_key_store_get_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，读 cert | 是，读 cert | 是，读 secp256k1 key pair 的公钥 |
 | `sss_key_object_free()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 是 |
 | `sss_asymmetric_context_init()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 |
 | `sss_asymmetric_sign_digest()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 |
