@@ -232,9 +232,9 @@ static sss_status_t run_ecc_sign_verify(ex_sss_boot_ctx_t *boot_ctx)
 	sss_object_t public_key = { 0 };
 
 	se05x_demo_stats_init(&stats, "ECC_SIGN_VERIFY");
-	LOG_INF("ECC_SIGN_VERIFY 开始：写入/复用 demo P-256 私钥并做挑战签名验签");
-	LOG_INF("会写 persistent NVM：object_id=0x%08" PRIX32
-		"；已有对象时不覆盖",
+	LOG_INF("ECC_SIGN_VERIFY started: write/reuse demo P-256 private key and sign/verify challenge");
+	LOG_INF("Persistent NVM write possible: object_id=0x%08" PRIX32
+		"; existing object will not be overwritten",
 		(uint32_t)SE05X_DEMO_OBJECT_ID_ECC_KEY);
 
 	prepare_demo_key(&stats, boot_ctx, se_session, &key_pair);

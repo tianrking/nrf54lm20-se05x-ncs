@@ -177,8 +177,8 @@ static sss_status_t run_tls_client_identity(ex_sss_boot_ctx_t *boot_ctx)
 	sss_object_t key_pair = { 0 };
 
 	se05x_demo_stats_init(&stats, "TLS_CLIENT_IDENTITY");
-	LOG_INF("TLS_CLIENT_IDENTITY 开始：读取证书并用 SE 内私钥签名 TLS handshake digest");
-	LOG_INF("本 demo 不新写 NVM；依赖 key=0x%08" PRIX32 " cert=0x%08" PRIX32,
+	LOG_INF("TLS_CLIENT_IDENTITY started: read certificate and sign TLS handshake digest in SE");
+	LOG_INF("No new NVM writes; requires key=0x%08" PRIX32 " cert=0x%08" PRIX32,
 		(uint32_t)SE05X_DEMO_OBJECT_ID_ECC_KEY,
 		(uint32_t)SE05X_DEMO_OBJECT_ID_CERT);
 

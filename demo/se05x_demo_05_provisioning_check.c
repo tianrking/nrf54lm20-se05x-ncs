@@ -145,8 +145,8 @@ static sss_status_t run_provisioning_check(ex_sss_boot_ctx_t *boot_ctx)
 	pSe05xSession_t se_session = &session->s_ctx;
 
 	se05x_demo_stats_init(&stats, "PROVISIONING_CHECK");
-	LOG_INF("PROVISIONING_CHECK 开始：应用 key/证书写入前的真实业务预检");
-	LOG_INF("当前不创建 key，不导入证书，不写 SE05x NVM；只确认写入前条件");
+	LOG_INF("PROVISIONING_CHECK started: precheck before app key/certificate provisioning");
+	LOG_INF("No key creation, no certificate import, no SE05x NVM writes; precheck only");
 
 	provisioning_get_version(&stats, se_session);
 	provisioning_check_object(&stats, se_session, kSE05x_AppletResID_PLATFORM_SCP,
@@ -163,8 +163,8 @@ static sss_status_t run_provisioning_check(ex_sss_boot_ctx_t *boot_ctx)
 	provisioning_crypto_object_list(&stats, se_session);
 	provisioning_generate_csr_nonce(&stats, se_session);
 
-	LOG_INF("真实业务下一步：根据 applet 能力和空间结果，决定是否进入 key/cert 写入工站");
-	LOG_INF("后续写入型 demo 必须显式声明 object ID，避免覆盖已有生产对象");
+	LOG_INF("Business next step: decide whether to enter key/cert provisioning station");
+	LOG_INF("Future write demos must declare object IDs explicitly to avoid production overwrite");
 	se05x_demo_log_summary(&stats);
 	return se05x_demo_stats_result(&stats);
 }

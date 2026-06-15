@@ -182,9 +182,9 @@ static sss_status_t run_certificate_store(ex_sss_boot_ctx_t *boot_ctx)
 	sss_object_t cert_obj = { 0 };
 
 	se05x_demo_stats_init(&stats, "CERTIFICATE_STORE");
-	LOG_INF("CERTIFICATE_STORE 开始：写入/复用 demo 设备证书并回读校验");
-	LOG_INF("会写 persistent NVM：object_id=0x%08" PRIX32
-		"；已有对象时不覆盖",
+	LOG_INF("CERTIFICATE_STORE started: write/reuse demo device certificate and read back");
+	LOG_INF("Persistent NVM write possible: object_id=0x%08" PRIX32
+		"; existing object will not be overwritten",
 		(uint32_t)SE05X_DEMO_OBJECT_ID_CERT);
 
 	prepare_certificate_object(&stats, boot_ctx, se_session, &cert_obj);

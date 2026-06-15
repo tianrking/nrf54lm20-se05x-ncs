@@ -83,7 +83,7 @@ static void print_menu(void)
 {
 	printk("\n");
 	printk("========== SE05x Demo 00: UART safe API menu ==========\n");
-	printk("0 / h : 显示这个菜单\n");
+	printk("0 / h : Show this menu\n");
 	printk("1     : Se05x_API_GetVersion\n");
 	printk("2     : Se05x_API_GetExtVersion\n");
 	printk("3     : Se05x_API_GetRandom(16)\n");
@@ -97,9 +97,9 @@ static void print_menu(void)
 	printk("b     : Se05x_API_ReadECCurveList\n");
 	printk("c     : Se05x_API_ReadCryptoObjectList\n");
 	printk("d     : Se05x_API_ReadState\n");
-	printk("e     : Se05x_API_ReadIDList (可能因 OEF 权限返回 SKIP)\n");
-	printk("q     : 退出 Demo 00 并关闭 SE05x session\n");
-	printk("安全边界：本菜单不写 NVM，不创建对象，不删除对象，不改 SE05x 配置。\n");
+	printk("e     : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
+	printk("q     : Quit Demo 00 and close the SE05x session\n");
+	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
 	printk("=======================================================\n");
 }
 
@@ -114,7 +114,7 @@ static void print_result_sw(const char *name, smStatus_t sw)
 
 static void print_skip_sw(const char *name, smStatus_t sw)
 {
-	printk("SKIP %s sw=0x%04" PRIX16 "，该接口在当前 applet/OEF 上可能不开放。\n",
+	printk("SKIP %s sw=0x%04" PRIX16 "; this API may be disabled by the current applet/OEF.\n",
 	       name, (uint16_t)sw);
 }
 
@@ -275,8 +275,8 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 		return kStatus_SSS_Fail;
 	}
 
-	LOG_INF("UART_SAFE_API 开始：串口交互式安全 API 测试，不写 NVM，不创建对象");
-	printk("\nDemo 00 已启动。请在串口输入命令；输入 0 或 h 查看菜单，输入 q 退出。\n");
+	LOG_INF("UART_SAFE_API started: interactive safe API test, no NVM writes, no object creation");
+	printk("\nDemo 00 started. Type a command on UART. Type 0 or h for help, q to quit.\n");
 	print_menu();
 
 	while (1) {
@@ -338,11 +338,11 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 			cmd_read_id_list(se_session);
 			break;
 		case 'q':
-			printk("退出 Demo 00，main.c 将关闭 SE05x session。\n");
-			LOG_INF("UART_SAFE_API 退出");
+			printk("Quit Demo 00. main.c will close the SE05x session.\n");
+			LOG_INF("UART_SAFE_API quit");
 			return kStatus_SSS_Success;
 		default:
-			printk("未知命令 '%c'，输入 0 或 h 查看菜单。\n", cmd);
+			printk("Unknown command '%c'. Type 0 or h for help.\n", cmd);
 			break;
 		}
 	}
@@ -351,9 +351,9 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_uart_safe_api = {
 	.id = SE05X_DEMO_UART_SAFE_API,
 	.name = "uart_safe_api",
-	.when_to_use = "想通过串口逐条测试本工程安全 APDU 接口时使用，适合 bring-up、排查和教学演示。",
-	.flow = "打开 SCP03 后进入 UART 菜单；用户输入命令；每个命令调用一个只读/查询/随机数 API。",
-	.expected_output = "每条命令打印 OK/FAIL/SKIP、状态字、返回长度和数据 preview；输入 q 后正常退出。",
-	.se_features = "SCP03 内的安全只读 APDU：版本、随机数、UniqueID、对象检查、空间、列表和状态；不写 NVM。",
+	.when_to_use = "Interactive UART menu for safe APDU testing during bring-up and debugging.",
+	.flow = "Open SCP03, wait for a UART command, then call one safe read/query/random API.",
+	.expected_output = "Each command prints OK/FAIL/SKIP, status word, length, and preview; q quits.",
+	.se_features = "Safe APDUs inside SCP03: version, random, UniqueID, object checks, memory, lists, state.",
 	.run = run_uart_safe_api,
 };

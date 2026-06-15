@@ -212,7 +212,7 @@ static sss_status_t run_safe_read_only(ex_sss_boot_ctx_t *boot_ctx)
 	pSe05xSession_t se_session = &session->s_ctx;
 
 	se05x_demo_stats_init(&stats, "SAFE_READ_ONLY");
-	LOG_INF("SAFE_READ_ONLY 开始：只读测试，不写 NVM，不创建对象");
+	LOG_INF("SAFE_READ_ONLY started: read-only test, no NVM writes, no object creation");
 
 	if (test_get_version(&stats, se_session) != SM_OK) {
 		se05x_demo_log_summary(&stats);

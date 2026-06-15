@@ -147,7 +147,7 @@ static sss_status_t run_inventory(ex_sss_boot_ctx_t *boot_ctx)
 	pSe05xSession_t se_session = &session->s_ctx;
 
 	se05x_demo_stats_init(&stats, "INVENTORY");
-	LOG_INF("INVENTORY 开始：检查 SE05x applet 资源、能力和存储空间");
+	LOG_INF("INVENTORY started: check SE05x applet resources, features, and memory");
 
 	inventory_get_version(&stats, se_session);
 	inventory_check_object(&stats, se_session, kSE05x_AppletResID_UNIQUE_ID,

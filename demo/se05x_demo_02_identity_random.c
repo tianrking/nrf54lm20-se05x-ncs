@@ -109,7 +109,7 @@ static sss_status_t run_identity_random(ex_sss_boot_ctx_t *boot_ctx)
 	pSe05xSession_t se_session = &session->s_ctx;
 
 	se05x_demo_stats_init(&stats, "IDENTITY_RANDOM");
-	LOG_INF("IDENTITY_RANDOM 开始：读取 SE05x 身份信息并采样随机数");
+	LOG_INF("IDENTITY_RANDOM started: read SE05x identity and sample random values");
 
 	demo_get_version(&stats, se_session);
 	demo_read_unique_id(&stats, se_session);

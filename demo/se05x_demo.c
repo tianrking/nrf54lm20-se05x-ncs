@@ -65,24 +65,21 @@ const se05x_demo_t *se05x_demo_find(se05x_demo_id_t id)
 
 void se05x_demo_log_catalog(void)
 {
-	LOG_INF("可用 SE05x demo 列表：");
+	LOG_INF("Available SE05x demos:");
 	for (size_t i = 0; i < DEMO_COUNT; ++i) {
-		LOG_INF("  编号=%d 名称=%s", g_demos[i]->id, g_demos[i]->name);
+		LOG_INF("  id=%d name=%s", g_demos[i]->id, g_demos[i]->name);
 	}
 }
 
 void se05x_demo_log_selection(const se05x_demo_t *demo)
 {
 	if (demo == NULL) {
-		LOG_ERR("没有选中任何 demo");
+		LOG_ERR("No demo selected");
 		return;
 	}
 
-	LOG_INF("当前选择 demo：%s", demo->name);
-	LOG_INF("适用场景      ：%s", demo->when_to_use);
-	LOG_INF("执行流程      ：%s", demo->flow);
-	LOG_INF("期望输出      ：%s", demo->expected_output);
-	LOG_INF("SE05x 功能    ：%s", demo->se_features);
+	LOG_INF("Selected demo: id=%d name=%s", demo->id, demo->name);
+	LOG_INF("Demo details are documented in demo/README.md and api/README.md");
 }
 
 const char *se05x_demo_active_scp03_profile(void)
@@ -139,7 +136,7 @@ sss_status_t se05x_demo_stats_result(const se05x_demo_stats_t *stats)
 
 void se05x_demo_log_summary(const se05x_demo_stats_t *stats)
 {
-	LOG_INF("%s 汇总：pass=%u skip=%u fail=%u", stats->tag, stats->pass,
+	LOG_INF("%s summary: pass=%u skip=%u fail=%u", stats->tag, stats->pass,
 		stats->skip, stats->fail);
 }
 

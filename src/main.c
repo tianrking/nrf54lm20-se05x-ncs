@@ -89,7 +89,7 @@ static int app_open_se_session(void)
 	status = ex_sss_boot_open(&s_boot_ctx, NULL);
 	if (status != kStatus_SSS_Success) {
 		LOG_ERR("ex_sss_boot_open failed: status=0x%04X", (unsigned int)status);
-		LOG_ERR("Platform SCP03 没有打开成功，不能继续运行任何 SE05x demo");
+		LOG_ERR("Platform SCP03 open failed; abort all SE05x demos");
 		return -EIO;
 	}
 
@@ -115,8 +115,8 @@ int main(void)
 	sss_status_t status;
 	int err;
 
-	LOG_INF("nRF54LM20 + NXP SE05x demo 运行器启动");
-	LOG_INF("当前编译选择的 SCP03 profile: %s", se05x_demo_active_scp03_profile());
+	LOG_INF("nRF54LM20 + NXP SE05x demo runner started");
+	LOG_INF("Compiled SCP03 profile: %s", se05x_demo_active_scp03_profile());
 	se05x_demo_log_catalog();
 	se05x_demo_log_selection(demo);
 
@@ -136,9 +136,9 @@ int main(void)
 
 	status = demo->run(&s_boot_ctx);
 	if (status == kStatus_SSS_Success) {
-		LOG_INF("Demo %s 总体结果：OK", demo->name);
+		LOG_INF("Demo %s overall result: OK", demo->name);
 	} else {
-		LOG_ERR("Demo %s 总体结果：FAILED", demo->name);
+		LOG_ERR("Demo %s overall result: FAILED", demo->name);
 	}
 
 	/*

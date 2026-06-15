@@ -142,9 +142,9 @@ static sss_status_t run_business_onboarding(ex_sss_boot_ctx_t *boot_ctx)
 	pSe05xSession_t se_session = &session->s_ctx;
 
 	se05x_demo_stats_init(&stats, "BUSINESS_ONBOARDING");
-	LOG_INF("BUSINESS_ONBOARDING 开始：准备设备注册/产测上报所需的 SE 字段");
+	LOG_INF("BUSINESS_ONBOARDING started: prepare SE fields for registration/factory report");
 	LOG_INF("Business payload model: unique_id + applet_version + scp_profile + nonce + state");
-	LOG_INF("当前不写 NVM，不创建应用 key，不导入证书；SCP03 profile 保持现有配置");
+	LOG_INF("No NVM writes, no app key creation, no certificate import; SCP03 profile unchanged");
 
 	onboarding_get_version(&stats, se_session);
 	onboarding_read_unique_id(&stats, se_session);
@@ -152,8 +152,8 @@ static sss_status_t run_business_onboarding(ex_sss_boot_ctx_t *boot_ctx)
 	onboarding_get_registration_nonce(&stats, se_session);
 	onboarding_read_state(&stats, se_session);
 
-	LOG_INF("真实业务下一步：把上述字段随产测记录或注册请求上传到业务系统");
-	LOG_INF("真实量产增强：再增加 SE 内应用私钥签名 challenge，证明私钥不可导出");
+	LOG_INF("Business next step: upload these fields with factory record or registration request");
+	LOG_INF("Production hardening: add SE private-key challenge signing to prove non-exportability");
 	se05x_demo_log_summary(&stats);
 	return se05x_demo_stats_result(&stats);
 }
