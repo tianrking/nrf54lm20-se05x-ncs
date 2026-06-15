@@ -1,4 +1,5 @@
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -61,17 +62,13 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  *   英文 ASCII，避免串口工具编码不是 UTF-8 时出现中文乱码。
  *
  * 串口输入策略：
- *   推荐用文本模式发送单字符命令，例如 3、a、b、e、q。代码内部会做最小容错归一化，
- *   但串口界面只关心“命令对应哪个 SE05x API、API 返回了什么”，不把串口编码细节
- *   打印给使用者，避免 debug 时被无关信息干扰。
+ *   只接受文本模式发送的单字符命令，例如 3、a、b、e、q。代码只把大写字母归一化成
+ *   小写字母；非文本控制字节不会被猜成数字命令。这样如果串口工具误开了 hex/raw
+ *   发送模式，固件会明确提示 Unknown command，而不是误执行某个 API。
  */
 
 static int normalize_uart_command(int ch)
 {
-	if (ch >= 0x00 && ch <= 0x09) {
-		return '0' + ch;
-	}
-
 	if (ch >= 'A' && ch <= 'Z') {
 		return ch + ('a' - 'A');
 	}
@@ -132,14 +129,40 @@ static const char *command_api_name(int cmd)
 	}
 }
 
+static bool is_known_command(int cmd)
+{
+	switch (cmd) {
+	case '0':
+	case 'h':
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+	case 'a':
+	case 'b':
+	case 'c':
+	case 'd':
+	case 'e':
+	case 'q':
+		return true;
+	default:
+		return false;
+	}
+}
+
 static void print_api_call(int cmd)
 {
-	if (cmd >= 0x20 && cmd <= 0x7E) {
+	if (is_known_command(cmd)) {
 		printk("CMD '%c' -> CALL %s\n", cmd, command_api_name(cmd));
 		return;
 	}
 
-	printk("CMD non-text -> CALL %s\n", command_api_name(cmd));
+	printk("Unknown command. Use text mode and type 0 or h for help.\n");
 }
 
 static void print_hex_bytes(const char *label, const uint8_t *data, size_t data_len)
@@ -177,7 +200,7 @@ static void print_menu(void)
 	printk("e     : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
 	printk("q     : Quit Demo 00 and close the SE05x session\n");
 	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
-	printk("Input: send one text command, for example 3, then this demo calls the matching API.\n");
+	printk("Input: use text mode and send one command, for example 3, then this demo calls the matching API.\n");
 	printk("=======================================================\n");
 }
 
@@ -428,7 +451,6 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 			LOG_INF("UART_SAFE_API quit");
 			return kStatus_SSS_Success;
 		default:
-			printk("Unknown command. Type 0 or h for help.\n");
 			break;
 		}
 	}
