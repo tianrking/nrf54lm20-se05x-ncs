@@ -61,11 +61,9 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  *   英文 ASCII，避免串口工具编码不是 UTF-8 时出现中文乱码。
  *
  * 串口输入策略：
- *   推荐用文本模式发送 ASCII 字符，例如命令 3 发送字符 '3'，也就是 0x33。
- *   有些串口工具打开 hex encoded 发送后，输入 03 会发送单字节 0x03，而不是
- *   字符 '3'。为了现场排查方便，本 demo 兼容 0x00..0x09，把它们转换成
- *   '0'..'9'。字母命令 a/b/c/d/e/q/h 仍建议用文本模式，或在 hex 模式下发送
- *   ASCII 编码 61/62/63/64/65/71/68。
+ *   推荐用文本模式发送单字符命令，例如 3、a、b、e、q。代码内部会做最小容错归一化，
+ *   但串口界面只关心“命令对应哪个 SE05x API、API 返回了什么”，不把串口编码细节
+ *   打印给使用者，避免 debug 时被无关信息干扰。
  */
 
 static int normalize_uart_command(int ch)
@@ -81,12 +79,7 @@ static int normalize_uart_command(int ch)
 	return ch;
 }
 
-typedef struct {
-	int raw;
-	int command;
-} uart_command_t;
-
-static uart_command_t read_uart_command(void)
+static int read_uart_command(void)
 {
 	while (1) {
 		int ch = console_getchar();
@@ -94,10 +87,7 @@ static uart_command_t read_uart_command(void)
 			continue;
 		}
 
-		return (uart_command_t){
-			.raw = ch,
-			.command = normalize_uart_command(ch),
-		};
+		return normalize_uart_command(ch);
 	}
 }
 
@@ -142,22 +132,14 @@ static const char *command_api_name(int cmd)
 	}
 }
 
-static void print_received_command(const uart_command_t *input)
+static void print_api_call(int cmd)
 {
-	if (input->raw == input->command && input->raw >= 0x20 && input->raw <= 0x7E) {
-		printk("RX text command '%c' (raw=0x%02X) -> %s\n",
-		       input->command, input->raw, command_api_name(input->command));
+	if (cmd >= 0x20 && cmd <= 0x7E) {
+		printk("CMD '%c' -> CALL %s\n", cmd, command_api_name(cmd));
 		return;
 	}
 
-	if (input->command >= 0x20 && input->command <= 0x7E) {
-		printk("RX raw byte 0x%02X normalized to command '%c' -> %s\n",
-		       input->raw & 0xFF, input->command, command_api_name(input->command));
-		return;
-	}
-
-	printk("RX raw byte 0x%02X -> %s\n", input->raw & 0xFF,
-	       command_api_name(input->command));
+	printk("CMD non-text -> CALL %s\n", command_api_name(cmd));
 }
 
 static void print_hex_bytes(const char *label, const uint8_t *data, size_t data_len)
@@ -195,7 +177,7 @@ static void print_menu(void)
 	printk("e     : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
 	printk("q     : Quit Demo 00 and close the SE05x session\n");
 	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
-	printk("Input: use text mode when possible. Text '3'=ASCII 0x33; hex '03'=raw 0x03, also accepted as command 3.\n");
+	printk("Input: send one text command, for example 3, then this demo calls the matching API.\n");
 	printk("=======================================================\n");
 }
 
@@ -227,7 +209,8 @@ static void cmd_get_version(pSe05xSession_t session)
 
 	const uint16_t applet_config = ((uint16_t)version[3] << 8) | version[4];
 
-	printk("OK   GetVersion len=%u\n", (unsigned int)version_len);
+	printk("OK   GetVersion sw=0x%04" PRIX16 " len=%u\n",
+	       (uint16_t)sw, (unsigned int)version_len);
 	printk("     Applet version : %u.%u.%u\n", version[0], version[1], version[2]);
 	printk("     Applet config  : 0x%04" PRIX16 "\n", applet_config);
 	printk("     SecureBox      : %u.%u\n", version[5], version[6]);
@@ -254,8 +237,8 @@ static void cmd_get_random(pSe05xSession_t session)
 	smStatus_t sw = Se05x_API_GetRandom(session, sizeof(random), random, &random_len);
 
 	if (sw == SM_OK && random_len == sizeof(random)) {
-		printk("OK   GetRandom len=%u\n", (unsigned int)random_len);
-		printk("     Meaning: 16 raw random bytes generated inside SE05x; displayed as hex.\n");
+		printk("OK   GetRandom sw=0x%04" PRIX16 " len=%u\n",
+		       (uint16_t)sw, (unsigned int)random_len);
 		print_hex_bytes("Random", random, random_len);
 	} else {
 		print_result_sw("GetRandom", sw);
@@ -282,7 +265,8 @@ static void cmd_check_object(pSe05xSession_t session, uint32_t object_id,
 	smStatus_t sw = Se05x_API_CheckObjectExists(session, object_id, &result);
 
 	if (sw == SM_OK) {
-		printk("OK   %s object_id=0x%08" PRIX32 " exists=%s\n", name, object_id,
+		printk("OK   %s sw=0x%04" PRIX16 " object_id=0x%08" PRIX32 " exists=%s\n",
+		       name, (uint16_t)sw, object_id,
 		       result == kSE05x_Result_SUCCESS ? "yes" : "no");
 	} else {
 		print_result_sw(name, sw);
@@ -296,7 +280,8 @@ static void cmd_free_memory(pSe05xSession_t session, SE05x_MemoryType_t type,
 	smStatus_t sw = Se05x_API_GetFreeMemory(session, type, &free_mem);
 
 	if (sw == SM_OK) {
-		printk("OK   %s free=%" PRIu32 " bytes\n", name, free_mem);
+		printk("OK   %s sw=0x%04" PRIX16 " free=%" PRIu32 " bytes\n",
+		       name, (uint16_t)sw, free_mem);
 	} else {
 		print_result_sw(name, sw);
 	}
@@ -309,7 +294,8 @@ static void cmd_read_curve_list(pSe05xSession_t session)
 	smStatus_t sw = Se05x_API_ReadECCurveList(session, curve_list, &curve_list_len);
 
 	if (sw == SM_OK) {
-		printk("OK   ReadECCurveList len=%u\n", (unsigned int)curve_list_len);
+		printk("OK   ReadECCurveList sw=0x%04" PRIX16 " len=%u\n",
+		       (uint16_t)sw, (unsigned int)curve_list_len);
 		print_hex_bytes("CurveList", curve_list, curve_list_len);
 	} else {
 		print_skip_sw("ReadECCurveList", sw);
@@ -323,7 +309,8 @@ static void cmd_read_crypto_object_list(pSe05xSession_t session)
 	smStatus_t sw = Se05x_API_ReadCryptoObjectList(session, list, &list_len);
 
 	if (sw == SM_OK) {
-		printk("OK   ReadCryptoObjectList len=%u\n", (unsigned int)list_len);
+		printk("OK   ReadCryptoObjectList sw=0x%04" PRIX16 " len=%u\n",
+		       (uint16_t)sw, (unsigned int)list_len);
 		print_hex_bytes("CryptoObjectList", list, list_len);
 	} else {
 		print_skip_sw("ReadCryptoObjectList", sw);
@@ -337,7 +324,8 @@ static void cmd_read_state(pSe05xSession_t session)
 	smStatus_t sw = Se05x_API_ReadState(session, state, &state_len);
 
 	if (sw == SM_OK) {
-		printk("OK   ReadState len=%u\n", (unsigned int)state_len);
+		printk("OK   ReadState sw=0x%04" PRIX16 " len=%u\n",
+		       (uint16_t)sw, (unsigned int)state_len);
 		print_hex_bytes("State", state, state_len);
 	} else {
 		print_skip_sw("ReadState", sw);
@@ -353,8 +341,8 @@ static void cmd_read_id_list(pSe05xSession_t session)
 					     &id_list_len);
 
 	if (sw == SM_OK) {
-		printk("OK   ReadIDList len=%u more=0x%02X\n",
-		       (unsigned int)id_list_len, more);
+		printk("OK   ReadIDList sw=0x%04" PRIX16 " len=%u more=0x%02X\n",
+		       (uint16_t)sw, (unsigned int)id_list_len, more);
 		print_hex_bytes("IDList", id_list, id_list_len);
 	} else {
 		print_skip_sw("ReadIDList", sw);
@@ -378,10 +366,9 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 
 	while (1) {
 		printk("\nse05x-safe-api> ");
-		uart_command_t input = read_uart_command();
-		int cmd = input.command;
+		int cmd = read_uart_command();
 		printk("\n");
-		print_received_command(&input);
+		print_api_call(cmd);
 
 		switch (cmd) {
 		case '0':
@@ -441,13 +428,7 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 			LOG_INF("UART_SAFE_API quit");
 			return kStatus_SSS_Success;
 		default:
-			if (cmd >= 0x20 && cmd <= 0x7E) {
-				printk("Unknown command '%c' (0x%02X). Type 0 or h for help.\n",
-				       cmd, cmd);
-			} else {
-				printk("Unknown command byte 0x%02X. Type 0 or h for help.\n",
-				       cmd & 0xFF);
-			}
+			printk("Unknown command. Type 0 or h for help.\n");
 			break;
 		}
 	}

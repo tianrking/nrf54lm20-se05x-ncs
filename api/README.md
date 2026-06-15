@@ -318,7 +318,7 @@ const char *se05x_demo_active_scp03_profile(void);
 
 Demo 00 的源码文件是 `demo/se05x_demo_00_uart_safe_api.c`。它不是新的 SE05x 协议层，而是一个串口交互式外壳：用户输入命令，固件调用一个已经验证过的安全 APDU API，并立即打印结果。
 
-串口输入推荐使用文本模式。文本模式发送 `3` 时，实际字节是 ASCII `0x33`；固件会打印 `RX text command '3' (raw=0x33) -> Se05x_API_GetRandom(16)`。hex encoded 模式发送 `03` 时，实际字节是 raw `0x03`；当前 Demo 00 兼容 raw `0x00..0x09`，会打印 `RX raw byte 0x03 normalized to command '3' -> Se05x_API_GetRandom(16)`，然后执行命令 `3`。字母命令在 hex 模式下应发送对应 ASCII 编码，例如 `a=61`、`b=62`、`c=63`、`d=64`、`e=65`、`h=68`、`q=71`。
+串口输入推荐使用文本模式。文本模式发送 `3` 后，固件会直接打印本次命令对应的 API 调用和返回值，例如 `CMD '3' -> CALL Se05x_API_GetRandom(16)`、`OK GetRandom sw=0x9000 len=16` 和 16 字节随机数。Demo 00 的串口输出重点是“执行了哪个函数、SE05x 返回了什么”，不把串口编码细节作为主要输出。
 
 | 串口命令 | 调用函数 | API 类别 | 传入参数重点 | 返回内容 | NVM 风险 |
 | --- | --- | --- | --- | --- | --- |
