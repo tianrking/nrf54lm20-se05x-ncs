@@ -25,11 +25,11 @@
 - NXP Plug & Trust hostlib 运行在 Nordic NCS/Zephyr 上。
 - 通过 T=1 over I2C 和 SE05x 通信。
 - 使用 Platform SCP03 建立安全会话。
-- 运行 UART 交互式安全 API 菜单、只读、写入型和 TLS 身份 demo，覆盖版本、唯一 ID、随机数、对象状态、曲线列表、内存状态、ECC 签名、证书存储和 TLS 客户端身份材料检查。
+- 运行 UART 交互式安全 API 菜单、只读、写入型、TLS 身份和钱包研究 demo，覆盖版本、唯一 ID、随机数、对象状态、曲线列表、内存状态、ECC 签名、证书存储、TLS 客户端身份材料检查、secp256k1 能力探测和 ETH legacy 交易签名流程。
 
 当前工程刻意不包含 OTA、Bluetooth、NFC、MCUBoot 等无关产品功能，重点放在 nRF54LM20 和 SE05x 的安全芯片链路。默认选择的 Demo 00 是 UART 交互式安全 API 菜单，只包含读、查、随机数、状态、容量这类不会写 SE05x NVM 的接口，适合逐条测试 API。需要一键完整冒烟测试时可切到 Demo 01。
 
-从 Demo 04 开始，工程加入真实业务流程 demo。Demo 04/05 覆盖设备注册、产测上报、应用 key/证书写入前预检；Demo 06/07/08 覆盖 SE 内 ECC 私钥签名、设备证书持久存储、TLS 客户端身份材料检查；Demo 09 用来研究当前 SE05x 是否能启用 BTC/ETH 常用的 secp256k1 曲线并完成 transient key 的 ECDSA sign/verify。Demo 06/07 会写固定 demo object ID，已有对象时不覆盖；Demo 08 不新写对象，只复用 06/07 的 key 和 cert；Demo 09 只有在 secp256k1 当前为 `NOT_SET` 时才会写一次曲线参数 NVM，测试私钥使用 transient object，不写 persistent 私钥。详细风险说明见 [demo/README.md](demo/README.md)。
+从 Demo 04 开始，工程加入真实业务流程 demo。Demo 04/05 覆盖设备注册、产测上报、应用 key/证书写入前预检；Demo 06/07/08 覆盖 SE 内 ECC 私钥签名、设备证书持久存储、TLS 客户端身份材料检查；Demo 09 用来研究当前 SE05x 是否能启用 BTC/ETH 常用的 secp256k1 曲线并完成 transient key 的 ECDSA sign/verify；Demo 10 在 Demo09 的基础上补齐 ETH legacy transfer 的 RLP、Keccak-256、地址推导、r/s/v 候选和 raw transaction 候选输出。Demo 06/07 会写固定 demo object ID，已有对象时不覆盖；Demo 08 不新写对象，只复用 06/07 的 key 和 cert；Demo 09/10 只有在 secp256k1 当前为 `NOT_SET` 时才会写一次曲线参数 NVM，测试私钥使用 transient object，不写 persistent 私钥。详细风险说明见 [demo/README.md](demo/README.md)。
 
 ## 当前状态
 
@@ -45,6 +45,7 @@
 | 写入型 demo | 已实现并构建通过；Demo 06/07 会写 demo object ID |
 | TLS 身份 demo | 已实现并构建通过；Demo 08 复用 Demo 06/07 的对象 |
 | 钱包曲线研究 demo | 已实现并构建通过；Demo 09 用于验证 secp256k1 曲线启用和 transient sign/verify，默认不运行 |
+| ETH 钱包签名 demo | 已实现并构建通过；Demo 10 用于验证 ETH legacy transfer 的 RLP/Keccak/SE 签名/地址推导链路，默认不运行 |
 | `ReadIDList sw=0xFFFF` | 当前按 skip 处理，不影响基础连通性结论 |
 
 ## 串口输出和中文文档策略
@@ -68,7 +69,7 @@
 | 板级配置 | [boards/README.md](boards/README.md) | nRF54LM20 DK overlay、I2C 管脚、地址和排查方法。 |
 | bus 抽象层 | [se05x_bus/README.md](se05x_bus/README.md) | 平台无关 bus contract、Zephyr I2C backend 和调用链。 |
 | NXP hostlib 移植 | [nxp_se05x/README.md](nxp_se05x/README.md) | Plug & Trust 来源、目录职责、SCP03 profile、Zephyr porting 层。 |
-| PC 辅助工具 | [tools/README.md](tools/README.md) | Demo09 公钥、digest、signature 的 PC 侧独立验签脚本。 |
+| PC 辅助工具 | [tools/README.md](tools/README.md) | Demo09 公钥、digest、signature 的 PC 侧独立验签脚本；Demo10 ETH RLP、Keccak、地址、签名和 raw tx 候选验证脚本。 |
 
 ## 快速开始
 
@@ -162,6 +163,7 @@ flowchart TD
 | `SE05X_DEMO_CERTIFICATE_STORE` | Demo 07 | 写入/复用 demo 设备证书对象，并回读校验。 |
 | `SE05X_DEMO_TLS_CLIENT_IDENTITY` | Demo 08 | 读取证书并用 SE 内私钥签名 TLS handshake digest。 |
 | `SE05X_DEMO_WALLET_CURVE_CHECK` | Demo 09 | 研究 secp256k1 曲线能否启用，并用 transient key 做 ECDSA sign/verify。 |
+| `SE05X_DEMO_ETH_WALLET_SIGN` | Demo 10 | 演示 ETH legacy transfer 从交易字段、RLP、Keccak 到 SE05x secp256k1 签名和 raw tx 候选输出。 |
 
 每个 demo 的详细流程见 [demo/README.md](demo/README.md)。
 

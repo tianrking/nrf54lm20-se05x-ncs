@@ -42,6 +42,7 @@ extern const se05x_demo_t g_se05x_demo_ecc_sign_verify;
 extern const se05x_demo_t g_se05x_demo_certificate_store;
 extern const se05x_demo_t g_se05x_demo_tls_client_identity;
 extern const se05x_demo_t g_se05x_demo_wallet_curve_check;
+extern const se05x_demo_t g_se05x_demo_eth_wallet_sign;
 
 static const se05x_demo_t *const g_demos[] = {
 	&g_se05x_demo_uart_safe_api,
@@ -54,6 +55,7 @@ static const se05x_demo_t *const g_demos[] = {
 	&g_se05x_demo_certificate_store,
 	&g_se05x_demo_tls_client_identity,
 	&g_se05x_demo_wallet_curve_check,
+	&g_se05x_demo_eth_wallet_sign,
 };
 
 #define DEMO_COUNT (sizeof(g_demos) / sizeof(g_demos[0]))

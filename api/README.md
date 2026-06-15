@@ -7,7 +7,7 @@
 - Zephyr I2C backend API。
 - demo framework API。
 - 当前 demo 调用到的 SE05x APDU API。
-- Demo 06/07/08 调用到的 SSS key object、key store、asymmetric sign/verify API。
+- Demo 06/07/08/09/10 调用到的 SSS key object、key store、asymmetric sign/verify API。
 
 NXP Plug & Trust hostlib 内部还有更多未使用的加密、TLS、证书链和策略 API。本文只说明本工程已经在代码里调用并构建验证过的 API，避免把未验证接口写成项目能力。
 
@@ -439,12 +439,12 @@ smStatus_t Se05x_API_CheckObjectExists(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 检查指定 secure object 是否存在。 |
-| 使用 demo | Demo 00、Demo 01、Demo 03、Demo 04、Demo 05、Demo 06、Demo 07、Demo 08、Demo 09。 |
+| 使用 demo | Demo 00、Demo 01、Demo 03、Demo 04、Demo 05、Demo 06、Demo 07、Demo 08、Demo 09、Demo 10。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `objectID` | 输入参数。对象 ID。当前检查 `UNIQUE_ID`、`FEATURE`、`PLATFORM_SCP`。 |
 | `presult` | 输出参数。`kSE05x_Result_SUCCESS` 表示存在；`kSE05x_Result_FAILURE` 表示不存在。 |
 | 返回值 | `SM_OK` 表示查询命令成功；查询成功不等于对象一定存在，需要继续看 `presult`。 |
-| 本工程处理 | Demo 00 中作为 UART 单项查询；Demo 01 中作为 pass/skip 检查；Demo 03 用于 inventory；Demo 04/05 用于业务流程前置校验；Demo 06/07/08 用于写入前防覆盖和依赖对象检查。 |
+| 本工程处理 | Demo 00 中作为 UART 单项查询；Demo 01 中作为 pass/skip 检查；Demo 03 用于 inventory；Demo 04/05 用于业务流程前置校验；Demo 06/07/08 用于写入前防覆盖和依赖对象检查；Demo 09/10 用于清理前确认测试 object ID 是否存在。 |
 
 ### `Se05x_API_DeleteSecureObject`
 
@@ -456,11 +456,11 @@ smStatus_t Se05x_API_DeleteSecureObject(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 删除指定 SE05x secure object。 |
-| 使用 demo | Demo 09，仅用于清理保留测试对象 `0xEF090001`。 |
+| 使用 demo | Demo 09、Demo 10，仅用于清理各自保留测试对象。 |
 | `session_ctx` | 输入参数。SE05x session，必须已经通过 Platform SCP03 打开。 |
-| `objectID` | 输入参数。要删除的 secure object ID。Demo 09 固定只传 `SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1`，也就是 `0xEF090001`。 |
+| `objectID` | 输入参数。要删除的 secure object ID。Demo 09 固定只传 `SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1`，也就是 `0xEF090001`；Demo 10 固定只传 `SE05X_DEMO_OBJECT_ID_ETH_WALLET`，也就是 `0xEF100001`。 |
 | 返回值 | `SM_OK` 表示删除 APDU 成功；其他值表示对象不存在、权限不允许、对象状态不允许删除或 APDU 失败。 |
-| NVM 风险 | 这是写 SE05x persistent NVM 的 API。Demo 09 不做通用删除，不 DeleteAll，只在自己的测试 ID 残留或测试结束时清理 `0xEF090001`，避免重复运行时测试对象 ID 冲突。 |
+| NVM 风险 | 这是写 SE05x persistent NVM metadata 的 API。Demo 09/10 不做通用删除，不 DeleteAll，只在自己的测试 ID 残留或测试结束时清理 `0xEF090001` / `0xEF100001`，避免重复运行时测试对象 ID 冲突。 |
 | 业务含义 | 生产代码不能拿这个接口随意删除业务 key/cert。真实产品必须有 object ID 映射、权限策略、备份登记和清理确认流程。 |
 
 ### `Se05x_API_GetFreeMemory`
@@ -516,7 +516,7 @@ smStatus_t Se05x_API_ReadECCurveList(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x ECC curve 列表或曲线启用状态。返回的是 Weierstrass 曲线的 set indicator 数组，数组下标和 `SE05x_ECCurve_t` 曲线 ID 对应：`curveList[curve_id - 1]`。当前 Demo 00 会把原始字节解码为曲线名和 `SET/NOT_SET`，并额外给出钱包视角：P-256 是否 ready、BTC/ETH 需要的 `secp256k1` 是否 ready。 |
-| 使用 demo | Demo 00、Demo 01、Demo 03、Demo 05、Demo 09。 |
+| 使用 demo | Demo 00、Demo 01、Demo 03、Demo 05、Demo 09、Demo 10。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `curveList` | 输出 buffer，保存曲线列表数据。 |
 | `pcurveListLen` | 输入输出参数。调用前是 buffer 容量；调用后是实际返回长度。 |
@@ -533,11 +533,11 @@ smStatus_t Se05x_API_CreateCurve_secp256k1(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 把 secp256k1 曲线参数写入 SE05x，包括 A、B、G、N、Prime 等曲线参数。写入后 `ReadECCurveList()` 中 `kSE05x_ECCurve_Secp256k1` 应该从 `NOT_SET` 变为 `SET`。 |
-| 使用 demo | Demo 09。 |
+| 使用 demo | Demo 09、Demo 10。 |
 | `session_ctx` | 输入参数。SE05x session，必须已经通过 Platform SCP03 打开。 |
-| `curve_id` | 输入参数。Demo 09 固定传入 `kSE05x_ECCurve_Secp256k1`。 |
+| `curve_id` | 输入参数。Demo 09/10 固定传入 `kSE05x_ECCurve_Secp256k1`。 |
 | 返回值 | `SM_OK` 表示曲线参数写入成功；其他值表示当前 applet/OEF/权限不允许创建曲线，或者 APDU 写入失败。 |
-| NVM 风险 | 这是写 SE05x persistent NVM 的 API。Demo 09 只有在 `ReadECCurveList()` 确认 secp256k1 为 `NOT_SET` 时才调用，并且调用后再次读取曲线列表确认状态。 |
+| NVM 风险 | 这是写 SE05x persistent NVM 的 API。Demo 09/10 只有在 `ReadECCurveList()` 确认 secp256k1 为 `NOT_SET` 时才调用，并且调用后再次读取曲线列表确认状态。 |
 | 业务含义 | 如果这个 API 成功，只说明 secp256k1 曲线可以被当前 SE 配置启用；还需要继续验证 key generation、sign、verify，才能判断是否具备钱包签名基础能力。 |
 
 ### `Se05x_API_ReadCryptoObjectList`
@@ -590,7 +590,7 @@ sss_status_t sss_key_object_init(sss_object_t *keyObject,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 初始化一个 SSS key object 句柄，并把它绑定到当前 key store。 |
-| 使用 demo | Demo 06、Demo 07、Demo 08、Demo 09。 |
+| 使用 demo | Demo 06、Demo 07、Demo 08、Demo 09、Demo 10。 |
 | `keyObject` | 输出参数。调用前通常清零；调用成功后可用于 allocate/get/set/sign/read。 |
 | `keyStore` | 输入参数。本工程使用 `&boot_ctx->ks`。 |
 | 返回值 | `kStatus_SSS_Success` 表示成功；其他值表示 key store 或对象类型不匹配。 |
@@ -609,11 +609,11 @@ sss_status_t sss_key_object_allocate_handle(sss_object_t *keyObject,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 为一个新对象分配 SSS handle。对 SE05x persistent object 来说，这是写 key/cert 前的准备动作。 |
-| 使用 demo | Demo 06、Demo 07、Demo 09。 |
+| 使用 demo | Demo 06、Demo 07、Demo 09、Demo 10。 |
 | `keyObject` | 输入输出参数，必须已经 `sss_key_object_init()`。 |
-| `keyId` | 输入参数。Demo 06 使用 `0xEF060001`；Demo 07 使用 `0xEF070001`；Demo 09 使用 transient 测试 ID `0xEF090001`。 |
+| `keyId` | 输入参数。Demo 06 使用 `0xEF060001`；Demo 07 使用 `0xEF070001`；Demo 09 使用 transient 测试 ID `0xEF090001`；Demo 10 使用 transient 测试 ID `0xEF100001`。 |
 | `keyPart` | 输入参数。ECC 私钥对使用 `kSSS_KeyPart_Pair`；证书 binary object 使用 `kSSS_KeyPart_Default`。 |
-| `cipherType` | 输入参数。P-256 ECC 使用 `kSSS_CipherType_EC_NIST_P`；Demo 09 的 secp256k1 使用 `kSSS_CipherType_EC_NIST_K`；证书存储使用 `kSSS_CipherType_Binary`。 |
+| `cipherType` | 输入参数。P-256 ECC 使用 `kSSS_CipherType_EC_NIST_P`；Demo 09/10 的 secp256k1 使用 `kSSS_CipherType_EC_NIST_K`；证书存储使用 `kSSS_CipherType_Binary`。 |
 | `keyByteLenMax` | 输入参数。对象最大长度，ECC demo key 使用 DER 私钥长度，证书使用 DER 证书长度。 |
 | `options` | 输入参数。`kKeyObject_Mode_Persistent` 会写 persistent NVM；`kKeyObject_Mode_Transient` 只在当前 session 保留。 |
 | 返回值 | `kStatus_SSS_Success` 表示 handle 分配成功；失败时不应继续写入。 |
@@ -671,14 +671,14 @@ sss_status_t sss_key_store_generate_key(sss_key_store_t *keyStore,
 
 | 项目 | 说明 |
 | --- | --- |
-| 作用 | 让 SE05x 在指定 key object 中生成一把新 key。对于 Demo 09，它用于在 SE 内生成 secp256k1 transient key pair，私钥不导出。 |
-| 使用 demo | Demo 09。 |
+| 作用 | 让 SE05x 在指定 key object 中生成一把新 key。对于 Demo 09/10，它用于在 SE 内生成 secp256k1 transient key pair，私钥不导出。 |
+| 使用 demo | Demo 09、Demo 10。 |
 | `keyStore` | 输入参数。本工程使用 `&boot_ctx->ks`。 |
-| `keyObject` | 输入参数。必须已经通过 `sss_key_object_init()` 和 `sss_key_object_allocate_handle()` 分配好；Demo 09 使用 `kSSS_CipherType_EC_NIST_K`、`kSSS_KeyPart_Pair`、`kKeyObject_Mode_Transient`。 |
-| `keyBitLen` | 输入参数。Demo 09 传入 `256`，对应 secp256k1 256-bit 私钥长度。 |
-| `options` | 输入参数。Demo 09 当前传 `NULL`。 |
+| `keyObject` | 输入参数。必须已经通过 `sss_key_object_init()` 和 `sss_key_object_allocate_handle()` 分配好；Demo 09/10 使用 `kSSS_CipherType_EC_NIST_K`、`kSSS_KeyPart_Pair`、`kKeyObject_Mode_Transient`。 |
+| `keyBitLen` | 输入参数。Demo 09/10 传入 `256`，对应 secp256k1 256-bit 私钥长度。 |
+| `options` | 输入参数。Demo 09/10 当前传 `NULL`。 |
 | 返回值 | `kStatus_SSS_Success` 表示 SE 内 key 生成成功；其他值表示曲线、对象模式、权限或 hostlib 映射不匹配。 |
-| NVM 风险 | 风险取决于 `keyObject` 的对象模式。Demo 09 使用 transient 模式，因此测试 key 不写 persistent NVM；如果生产代码改为 persistent，就会创建长期私钥对象，必须有 object ID、策略、备份登记和删除方案。 |
+| NVM 风险 | 风险取决于 `keyObject` 的对象模式。Demo 09/10 使用 transient 模式，因此测试 key 不写 persistent 私钥内容；如果生产代码改为 persistent，就会创建长期私钥对象，必须有 object ID、策略、备份登记和删除方案。 |
 | 业务含义 | 这是判断“SE 能否原生持有 secp256k1 私钥”的关键步骤。它成功后仍需继续通过 `sss_asymmetric_sign_digest()` 验证签名能力。 |
 
 ### `sss_key_store_get_key`
@@ -694,14 +694,14 @@ sss_status_t sss_key_store_get_key(sss_key_store_t *keyStore,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 从 key store 读取对象数据。证书/binary object 可读；私钥通常不应可读。 |
-| 使用 demo | Demo 07、Demo 08。 |
+| 使用 demo | Demo 07、Demo 08、Demo 09、Demo 10。 |
 | `keyStore` | 输入参数。本工程使用 `&boot_ctx->ks`。 |
 | `keyObject` | 输入参数。要读取的对象 handle。 |
 | `data` | 输出 buffer。 |
 | `dataLen` | 输入输出参数。调用前是 buffer 容量；调用后是实际读取长度。 |
 | `pKeyBitLen` | 输出参数。返回对象 bit length。 |
 | 返回值 | `kStatus_SSS_Success` 表示读取成功。 |
-| 本工程处理 | Demo 07 读取后逐字节比较；Demo 08 读取证书用于模拟 TLS Certificate 消息。 |
+| 本工程处理 | Demo 07 读取后逐字节比较；Demo 08 读取证书用于模拟 TLS Certificate 消息；Demo 09/10 对 key pair object 调用时只导出公钥部分，用于验签和地址推导，私钥不会导出。 |
 
 ### `sss_key_object_free`
 
@@ -712,7 +712,7 @@ void sss_key_object_free(sss_object_t *keyObject);
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 释放本地 SSS object handle。 |
-| 使用 demo | Demo 06、Demo 07、Demo 08、Demo 09。 |
+| 使用 demo | Demo 06、Demo 07、Demo 08、Demo 09、Demo 10。 |
 | `keyObject` | 输入参数。已经 init/get/allocate 过的对象句柄。 |
 | 返回值 | 无。 |
 | 注意 | 对 persistent object 来说，这只是释放本地 handle，不等于删除 SE05x NVM 对象。 |
@@ -730,7 +730,7 @@ sss_status_t sss_asymmetric_context_init(sss_asymmetric_t *context,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 初始化非对称签名/验签上下文。 |
-| 使用 demo | Demo 06、Demo 08、Demo 09。 |
+| 使用 demo | Demo 06、Demo 08、Demo 09、Demo 10。 |
 | `context` | 输出参数。签名或验签上下文。 |
 | `session` | 输入参数。本工程使用 `&boot_ctx->session`。 |
 | `keyObject` | 输入参数。签名时是 ECC private key object；验签时是 public key object。 |
@@ -751,14 +751,14 @@ sss_status_t sss_asymmetric_sign_digest(sss_asymmetric_t *context,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 用 SE05x 内私钥对 digest 做 ECDSA 签名。 |
-| 使用 demo | Demo 06、Demo 08、Demo 09。 |
+| 使用 demo | Demo 06、Demo 08、Demo 09、Demo 10。 |
 | `context` | 输入参数。必须是 sign mode。 |
-| `digest` | 输入参数。待签名 digest。本工程使用 32 字节示例 digest。 |
+| `digest` | 输入参数。待签名 digest。本工程使用 32 字节 digest。Demo 10 传入的是 `Keccak256(ETH_SIGNING_RLP)`；虽然 SSS context 仍使用 `kAlgorithm_SSS_SHA256` 作为 32 字节 digest 类型标识，但实际签名的字节就是调用者传入的 Keccak digest。 |
 | `digestLen` | 输入参数。digest 长度，当前为 32。 |
 | `signature` | 输出 buffer。保存 DER/编码后的签名数据。 |
 | `signatureLen` | 输入输出参数。调用前是 signature buffer 容量；调用后是实际签名长度。 |
 | 返回值 | `kStatus_SSS_Success` 表示签名成功。 |
-| 业务意义 | 对应云端 challenge 签名或 TLS CertificateVerify 签名。 |
+| 业务意义 | 对应云端 challenge 签名、TLS CertificateVerify 签名，或 Demo 10 中的 ETH transaction digest 签名。 |
 
 ### `sss_asymmetric_verify_digest`
 
@@ -773,14 +773,14 @@ sss_status_t sss_asymmetric_verify_digest(sss_asymmetric_t *context,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 用公钥验证 digest/signature 是否匹配。 |
-| 使用 demo | Demo 06、Demo 09。 |
+| 使用 demo | Demo 06、Demo 09、Demo 10。 |
 | `context` | 输入参数。必须是 verify mode。 |
 | `digest` | 输入参数。原始 digest。 |
 | `digestLen` | 输入参数。digest 长度。 |
 | `signature` | 输入参数。待验证签名。 |
 | `signatureLen` | 输入参数。签名长度。 |
 | 返回值 | `kStatus_SSS_Success` 表示验签成功；失败表示签名不匹配或对象/算法不匹配。 |
-| 本工程处理 | Demo 06 用 transient public key 验证 SE 内私钥签名；Demo 09 用 transient secp256k1 key 验证刚生成的签名，证明 key pair 和签名链路成立。 |
+| 本工程处理 | Demo 06 用 transient public key 验证 SE 内私钥签名；Demo 09 用 transient secp256k1 key 验证刚生成的签名，证明 key pair 和签名链路成立；Demo 10 用相同方式验证 ETH Keccak digest 对应的签名。 |
 
 ### `sss_asymmetric_context_free`
 
@@ -791,39 +791,38 @@ void sss_asymmetric_context_free(sss_asymmetric_t *context);
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 释放非对称签名/验签上下文。 |
-| 使用 demo | Demo 06、Demo 08、Demo 09。 |
+| 使用 demo | Demo 06、Demo 08、Demo 09、Demo 10。 |
 | `context` | 输入参数。已经 init 的 asymmetric context。 |
 | 返回值 | 无。 |
 
 ## Demo 与 API 对应表
-
-| API | Demo 00 | Demo 01 | Demo 02 | Demo 03 | Demo 04 | Demo 05 | Demo 06 | Demo 07 | Demo 08 | Demo 09 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `ex_sss_boot_open()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
-| `ex_sss_key_store_and_object_init()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
-| `Se05x_API_GetVersion()` | 是，命令 `AT+1` | 是 | 是 | 是 | 是 | 是 | 否 | 否 | 否 | 否 |
-| `Se05x_API_GetExtVersion()` | 是，命令 `AT+2` | 是 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| `Se05x_API_GetRandom()` | 是，命令 `AT+3` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce | 否 | 否 | 否 | 否 |
-| `Se05x_API_ReadObject(UNIQUE_ID)` | 是，命令 `AT+4` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
-| `Se05x_API_CheckObjectExists()` | 是，命令 `AT+5/6/7` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature | 是，ECC key | 是，cert | 是，key/cert | 是，测试 key ID |
-| `Se05x_API_DeleteSecureObject()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，仅清理 `0xEF090001` |
-| `Se05x_API_GetFreeMemory()` | 是，命令 `AT+8/9/A` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
-| `Se05x_API_ReadIDList()` | 是，命令 `AT+E` | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 | 否 |
-| `Se05x_API_ReadECCurveList()` | 是，命令 `AT+B` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 是，检查 secp256k1 |
-| `Se05x_API_CreateCurve_secp256k1()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，可能写曲线 NVM |
-| `Se05x_API_ReadCryptoObjectList()` | 是，命令 `AT+C` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
-| `Se05x_API_ReadState()` | 是，命令 `AT+D` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
-| `sss_key_object_init()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 是 |
-| `sss_key_object_allocate_handle()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 否 | 是，transient key |
-| `sss_key_object_get_handle()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 否 |
-| `sss_key_store_set_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 是，写 ECC key | 是，写 cert | 否 | 否 |
-| `sss_key_store_generate_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，SE 内生成 transient key |
-| `sss_key_store_get_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，读 cert | 是，读 cert | 是，读 secp256k1 key pair 的公钥 |
-| `sss_key_object_free()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 是 |
-| `sss_asymmetric_context_init()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 |
-| `sss_asymmetric_sign_digest()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 |
-| `sss_asymmetric_verify_digest()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 否 | 是 |
-| `sss_asymmetric_context_free()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 |
+| API | Demo 00 | Demo 01 | Demo 02 | Demo 03 | Demo 04 | Demo 05 | Demo 06 | Demo 07 | Demo 08 | Demo 09 | Demo 10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ex_sss_boot_open()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
+| `ex_sss_key_store_and_object_init()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
+| `Se05x_API_GetVersion()` | 是，命令 `AT+1` | 是 | 是 | 是 | 是 | 是 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_GetExtVersion()` | 是，命令 `AT+2` | 是 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_GetRandom()` | 是，命令 `AT+3` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_ReadObject(UNIQUE_ID)` | 是，命令 `AT+4` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_CheckObjectExists()` | 是，命令 `AT+5/6/7` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature | 是，ECC key | 是，cert | 是，key/cert | 是，测试 key ID | 是，测试 key ID |
+| `Se05x_API_DeleteSecureObject()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，仅清理 `0xEF090001` | 是，仅清理 `0xEF100001` |
+| `Se05x_API_GetFreeMemory()` | 是，命令 `AT+8/9/A` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_ReadIDList()` | 是，命令 `AT+E` | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_ReadECCurveList()` | 是，命令 `AT+B` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 是，检查 secp256k1 | 是，检查 secp256k1 |
+| `Se05x_API_CreateCurve_secp256k1()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，可能写曲线 NVM | 是，可能写曲线 NVM |
+| `Se05x_API_ReadCryptoObjectList()` | 是，命令 `AT+C` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_ReadState()` | 是，命令 `AT+D` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 | 否 |
+| `sss_key_object_init()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 是 | 是 |
+| `sss_key_object_allocate_handle()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 否 | 是，transient key | 是，transient key |
+| `sss_key_object_get_handle()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 否 | 否 |
+| `sss_key_store_set_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 是，写 ECC key | 是，写 cert | 否 | 否 | 否 |
+| `sss_key_store_generate_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，SE 内生成 transient key | 是，SE 内生成 transient key |
+| `sss_key_store_get_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，读 cert | 是，读 cert | 是，读 secp256k1 key pair 的公钥 | 是，读 secp256k1 key pair 的公钥 |
+| `sss_key_object_free()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 | 是 | 是 |
+| `sss_asymmetric_context_init()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 | 是 |
+| `sss_asymmetric_sign_digest()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 | 是，签 ETH Keccak digest |
+| `sss_asymmetric_verify_digest()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 否 | 是 | 是 |
+| `sss_asymmetric_context_free()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 | 是 | 是 |
 
 ## 新增 API 文档规则
 

@@ -9,6 +9,7 @@
 - Demo 06/07 是写入型 demo，会写固定 demo object ID，已有对象时不覆盖。
 - Demo 08 不新写对象，只复用 Demo 06/07 已准备好的 key 和 certificate。
 - Demo 09 是钱包曲线研究 demo。它会先只读查询 secp256k1 状态；如果当前是 `NOT_SET`，会尝试写入 secp256k1 曲线参数到 SE05x persistent NVM；测试私钥使用 transient object，不写 persistent 私钥内容；运行前后只会清理自己的测试 object ID `0xEF090001`。
+- Demo 10 是 ETH 钱包签名链路 demo。它复用 Demo09 已验证的 secp256k1 能力，在 nRF 侧完成 legacy transaction RLP、Ethereum Keccak-256、地址推导、DER 到 r/s 转换和 raw transaction 候选输出；SE05x 只负责持有 transient 私钥并对 digest 做 ECDSA 签名。
 - 先验证安全会话，再调用 APDU/SSS API。
 - 每个 demo 都输出 pass、skip、fail 统计，便于现场判断。
 - 串口运行时输出统一使用英文 ASCII，避免串口终端编码不一致造成中文乱码；完整中文说明保留在 README 和源码注释中。
@@ -27,6 +28,7 @@
 | 07 | `se05x_demo_07_certificate_store.c` | `certificate_store` | 设备证书对象写入、回读和内容校验。 | 是，写 `0xEF070001` |
 | 08 | `se05x_demo_08_tls_client_identity.c` | `tls_client_identity` | TLS 客户端身份材料检查和 handshake digest 签名。 | 否，复用 06/07 |
 | 09 | `se05x_demo_09_wallet_curve_check.c` | `wallet_curve_check` | 验证 secp256k1 曲线能否启用，并用 UART AT 命令反复做 transient key、公钥输出、ECDSA sign/verify。 | 可能写：仅在 secp256k1 为 `NOT_SET` 时写曲线参数；会清理 Demo09 专用测试 ID `0xEF090001` |
+| 10 | `se05x_demo_10_eth_wallet_sign.c` | `eth_wallet_sign` | 演示 ETH legacy transaction 的真实字段输入、RLP、Keccak-256、SE05x secp256k1 签名、公钥推地址、r/s/v 候选和 raw tx 候选。 | 可能写：仅在 secp256k1 为 `NOT_SET` 时写曲线参数；会清理 Demo10 专用测试 ID `0xEF100001` |
 
 ## 代码对应关系
 
@@ -42,6 +44,7 @@
 | Demo 07 | `se05x_demo_07_certificate_store.c` | `run_certificate_store()` | `g_se05x_demo_certificate_store` | persistent binary certificate object、write/read/compare。 |
 | Demo 08 | `se05x_demo_08_tls_client_identity.c` | `run_tls_client_identity()` | `g_se05x_demo_tls_client_identity` | key/cert object check、certificate read、TLS digest sign。 |
 | Demo 09 | `se05x_demo_09_wallet_curve_check.c` | `run_wallet_curve_check()` | `g_se05x_demo_wallet_curve_check` | ReadECCurveList、CreateCurve secp256k1、transient EC_NIST_K key、ECDSA sign/verify。 |
+| Demo 10 | `se05x_demo_10_eth_wallet_sign.c` | `run_eth_wallet_sign()` | `g_se05x_demo_eth_wallet_sign` | ETH legacy RLP、Keccak-256、secp256k1 transient key、public key/address、ECDSA sign/verify、r/s/raw tx。 |
 
 所有 demo 都通过 `demo/se05x_demo.c` 中的 demo catalog 注册，再由 `src/main.c` 根据 `APP_SELECTED_DEMO` 查找并调用 `demo->run(&s_boot_ctx)`。所以 README 中的流程图、demo 编号、源码文件和串口日志名称是一一对应的。
 
@@ -938,6 +941,129 @@ AT+R : Run full wallet probe: curve + transient key + public key + sign/verify
 AT+C : Check secp256k1 curve status only
 AT+S : Generate transient secp256k1 key, print public key, sign and verify
 AT+Q : Quit Demo 09 and close SE05x session
+```
+
+## Demo 10：eth_wallet_sign
+
+文件：`se05x_demo_10_eth_wallet_sign.c`
+
+### 适用场景
+
+Demo10 是从 Demo09 继续往前走的一步：Demo09 证明“这颗 SE05x 当前可以做 secp256k1 ECDSA”，Demo10 则把它放进 ETH legacy transaction 的签名流程里。它不是 PC 模拟签名，也不是纯文档样例；固件会把当前交易字段编码成 RLP，计算 Ethereum Keccak-256 digest，再让 SE05x 内部 transient secp256k1 私钥对 digest 做 ECDSA 签名。
+
+当前 Demo10 的边界要说清楚：
+
+- 真实：交易字段输入、legacy/EIP-155 RLP、Ethereum Keccak-256、公钥推 ETH 地址、SE05x ECDSA 签名、DER 转 r/s、low-S、raw transaction 候选输出。
+- 测试：私钥是 Demo10 专用 transient key，每次 `AT+S` 重新生成，签完清理 `0xEF100001`，不会作为真实资产私钥长期保存。
+- 生产还缺：持久钱包 key 或派生策略、屏幕/按键确认、交易字段安全解析、EIP-1559 type-2、recovery id 选择、广播前策略校验、固件防回滚和备份登记。
+
+### 交易字段
+
+Demo10 启动后会先载入一组默认字段，方便快速测试；你可以用 UART AT 命令把它改成手机或 PC 准备好的真实交易字段。
+
+| 字段 | 命令 | 说明 |
+| --- | --- | --- |
+| nonce | `AT+N=<decimal>` | 发送账户当前 nonce，必须由手机/PC 从链上或节点查询。 |
+| gasPrice | `AT+G=<decimal>` | legacy 交易 gas 单价，单位 wei。 |
+| gasLimit | `AT+L=<decimal>` | 普通 ETH 转账通常为 `21000`。 |
+| to | `AT+T=<40 hex>` | 收款地址，支持带或不带 `0x`。 |
+| value | `AT+V=<decimal>` | 转账金额，单位 wei。 |
+| chainId | `AT+C=<decimal>` | EIP-155 链 ID，例如 Ethereum mainnet 为 `1`。 |
+| data | `AT+D=<hex>` | 普通转账为空，发送 `AT+D=`；合约调用时是 calldata，当前限制 64 字节便于串口测试。 |
+
+### 串口命令
+
+| 命令 | 作用 | 是否写 NVM |
+| --- | --- | --- |
+| `AT+H` | 打印菜单。 | 否 |
+| `AT+P` | 打印当前交易字段。 | 否 |
+| `AT+R` | 恢复默认样例交易字段。 | 否 |
+| `AT+S` | 对当前交易字段执行完整签名链路。 | 如果 secp256k1 还不是 `SET`，会先写一次曲线参数；每次会清理 Demo10 专用测试对象 `0xEF100001`。 |
+| `AT+Q` | 退出 Demo10，main 关闭 SE05x session。 | 否 |
+
+示例：
+
+```text
+AT+N=5
+AT+G=1000000000
+AT+L=21000
+AT+T=0x3535353535353535353535353535353535353535
+AT+V=1000000000000000
+AT+C=1
+AT+D=
+AT+S
+```
+
+### 输出怎么理解
+
+`AT+S` 成功后会打印：
+
+- `ETH_SIGNING_RLP`：当前交易字段按 legacy/EIP-155 规则编码后的待签名 RLP。
+- `ETH_SIGNING_HASH_KECCAK256`：`Keccak256(ETH_SIGNING_RLP)`，这就是 SE05x 实际签名的 32 字节 digest。
+- `ETH_PUBLIC_KEY_UNCOMPRESSED_04XY`：SE05x transient 私钥对应的公钥，私钥不导出。
+- `ETH_FROM_ADDRESS`：`Keccak256(public key X||Y)` 的最后 20 字节。
+- `ETH_SIGNATURE_DER`：SE05x 返回的 ECDSA DER 签名。
+- `ETH_SIGNATURE_R` / `ETH_SIGNATURE_S_LOW`：给 Ethereum raw transaction 使用的 r/s。
+- `ETH_V_CANDIDATE_0/1`：`chainId * 2 + 35/36` 两个候选。SE05x 不返回 recovery id，手机/PC 需要用公钥恢复或地址校验选择正确的 v。
+- `ETH_RAW_TX_CANDIDATE_V0/V1`：两个 raw transaction 候选，广播前必须选择能恢复出 `ETH_FROM_ADDRESS` 的那个。
+
+### PC 验证
+
+离线验证串口日志：
+
+```bat
+python tools\verify_demo10_eth_tx.py --log demo10.log
+```
+
+让 PC 直接触发默认字段签名并验证：
+
+```bat
+python tools\verify_demo10_eth_tx.py --port COM9 --command AT+S
+```
+
+让 PC 先设置交易字段，再触发签名并验证：
+
+```bat
+python tools\verify_demo10_eth_tx.py --port COM9 ^
+  --set-command AT+N=5 ^
+  --set-command AT+G=1000000000 ^
+  --set-command AT+L=21000 ^
+  --set-command AT+T=0x3535353535353535353535353535353535353535 ^
+  --set-command AT+V=1000000000000000 ^
+  --set-command AT+C=1 ^
+  --set-command AT+D= ^
+  --command AT+S
+```
+
+脚本会解析板子输出的交易字段，重新计算 RLP、Keccak、地址、r/s_low 和 raw transaction 候选，并用公钥验证 SE05x 签名。脚本不会生成私钥、不会替 SE 签名、不会连接节点、不会广播交易。
+
+### API 流程
+
+```mermaid
+flowchart TD
+    A["run_eth_wallet_sign()"] --> B["console_init"]
+    B --> C["eth_reset_tx_to_sample"]
+    C --> U["UART menu waits AT+字段 / AT+S / AT+Q"]
+    U -->|"AT+N/G/L/T/V/C/D"| V["更新当前 legacy transaction 字段"]
+    V --> U
+    U -->|"AT+S"| D["ReadECCurveList"]
+    D --> E{"Secp256k1 SET?"}
+    E -->|no| F["CreateCurve_secp256k1 写一次曲线参数"]
+    E -->|yes| G["Build signing RLP from current fields"]
+    F --> G
+    G --> H["Keccak256(signing RLP)"]
+    H --> I["Check/Delete 0xEF100001"]
+    I --> J["allocate_handle EC_NIST_K transient"]
+    J --> K["sss_key_store_generate_key"]
+    K --> L["sss_key_store_get_key 读取公钥"]
+    L --> M["Keccak256(pubkey X||Y) -> ETH address"]
+    M --> N["sss_asymmetric_sign_digest Keccak digest"]
+    N --> O["sss_asymmetric_verify_digest"]
+    O --> P["DER parse -> r/s"]
+    P --> Q["low-S normalize"]
+    Q --> R["Build raw tx candidate v=chainId*2+35/36"]
+    R --> S["Print ETH_* verification material"]
+    S --> U
 ```
 
 ## 写入型 demo 安全说明
