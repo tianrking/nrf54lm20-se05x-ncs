@@ -792,6 +792,52 @@ python tools\verify_demo09_signature.py --port COM9 --command AT+S
 
 这里验证的是 ECDSA 签名，不是“公钥解密”。PC/手机端用公钥证明签名确实对应这个 32 字节 digest；私钥仍然在 SE 内，不导出、不打印。
 
+### 为什么这能作为 BTC/ETH 钱包的底层能力
+
+BTC 和 ETH 的核心账户签名都建立在 `secp256k1 + ECDSA` 这条密码学链路上。真实钱包里，手机或 nRF 先把交易按各自链的规则编码并 hash 成 32 字节 digest，然后私钥对这个 digest 做 ECDSA 签名。链上节点或钱包软件再用公钥/地址规则验证签名。
+
+Demo09 验证的正是这条链路里最关键、也最难替代的硬件能力：**secp256k1 私钥能否留在 SE05x 内部，并且由 SE05x 对 32 字节 digest 完成 ECDSA 签名**。
+
+| 钱包概念 | BTC/ETH 真实需要 | Demo09 当前验证了什么 |
+| --- | --- | --- |
+| 曲线 | BTC/ETH 使用 `secp256k1`。 | `ReadECCurveList` 确认 `Secp256k1=SET`；如果是 `NOT_SET`，Demo09 尝试写入曲线参数。 |
+| 私钥 | 私钥不能出现在手机、串口、固件日志里。 | `sss_key_store_generate_key()` 在 SE 内生成 transient secp256k1 私钥；私钥不导出、不打印。 |
+| 公钥 | 钱包需要公钥来推导地址，外部也需要公钥验签。 | `sss_key_store_get_key()` 读取 key pair 的公钥部分，输出 `PUBLIC_KEY_UNCOMPRESSED_04XY`。 |
+| 待签名内容 | BTC/ETH 最终都是签 32 字节 digest，不是直接签任意长交易原文。 | `DIGEST_SHA256_INPUT` 固定为 32 字节测试 digest。 |
+| 签名 | BTC/ETH 使用 secp256k1 ECDSA 签名。 | `sss_asymmetric_sign_digest()` 在 SE 内签名，输出 `SIGNATURE_DER`。 |
+| 验签 | PC、手机、链节点都可以用公钥验签。 | Demo09 本机 `VerifyDigest` 验签；`tools/verify_demo09_signature.py` 可在 PC 上独立验签。 |
+
+所以 Demo09 成功后，可以得到这个结论：
+
+```text
+当前 SE05x 配置已经具备 BTC/ETH 钱包所需的 secp256k1 ECDSA 私钥签名基础能力。
+```
+
+但还不能说“完整 BTC/ETH 钱包已经完成”。从 Demo09 到真实钱包，还必须补上链协议层：
+
+| 还需要补的层 | BTC | ETH |
+| --- | --- | --- |
+| 交易解析 | UTXO、input/output、script、sighash。 | legacy/RLP、EIP-155、EIP-1559、typed transaction。 |
+| 摘要计算 | double-SHA256。 | Keccak-256。 |
+| 签名格式 | DER signature + sighash byte，通常还要 low-S。 | `r/s/v`，需要 recovery id。 |
+| 地址推导 | public key hash、Base58Check、bech32 等。 | Keccak(public key) 后取后 20 字节。 |
+| 用户确认 | 显示收款地址、金额、手续费、网络等。 | 显示 to、value、gas、chain id、contract call 摘要等。 |
+| 生产密钥管理 | 正式 object ID、权限、备份和生命周期策略。 | 同左。 |
+
+真实产品推荐流程是：
+
+```mermaid
+flowchart TD
+    A["手机 App 准备交易"] --> B["发送交易原文或待确认字段给 nRF"]
+    B --> C["nRF 解析并显示收款地址/金额/手续费"]
+    C --> D{"用户物理确认?"}
+    D -->|否| E["拒绝签名"]
+    D -->|是| F["nRF 计算 BTC/ETH 对应 digest"]
+    F --> G["SE05x 内部 secp256k1 私钥签名 digest"]
+    G --> H["nRF 返回 signature 和公钥/地址材料"]
+    H --> I["手机组装交易并广播"]
+```
+
 ### NVM 风险边界
 
 | 项目 | 说明 |
