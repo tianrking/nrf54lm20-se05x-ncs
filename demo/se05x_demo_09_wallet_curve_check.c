@@ -25,7 +25,9 @@ LOG_MODULE_REGISTER(se05x_demo_wallet_curve, LOG_LEVEL_INF);
  * - 会在 secp256k1 当前 NOT_SET 时调用 Se05x_API_CreateCurve_secp256k1()。
  * - CreateCurve + SetECCurveParam 会写 SE05x persistent NVM。
  * - 如果 secp256k1 已经 SET，本 demo 不会重复创建曲线。
- * - 测试 key 使用 transient object，session 关闭后消失，不写 persistent 私钥。
+ * - 测试 key 使用 transient object，不写 persistent 私钥内容。
+ * - SE05x transient object 的对象属性/ID 可能仍会保留，所以本 demo 只会自动清理
+ *   自己保留的测试 object_id=0xEF090001，不会删除任何业务对象。
  * - 不删除曲线，不 DeleteAll，不循环重试。
  *
  * 为什么要单独做这个 demo：
@@ -112,12 +114,47 @@ static void ensure_secp256k1_curve(se05x_demo_stats_t *stats, pSe05xSession_t se
 	}
 }
 
+static bool delete_wallet_test_object_if_exists(se05x_demo_stats_t *stats,
+						pSe05xSession_t se_session,
+						const char *phase)
+{
+	SE05x_Result_t exists = kSE05x_Result_NA;
+	smStatus_t sw = Se05x_API_CheckObjectExists(se_session,
+						    SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1,
+						    &exists);
+
+	if (sw != SM_OK) {
+		se05x_demo_mark_fail_sw(stats, "CheckObjectExists(WALLET_TEST_KEY)", sw);
+		return false;
+	}
+
+	if (exists != kSE05x_Result_SUCCESS) {
+		if (phase != NULL) {
+			LOG_INF("%s: wallet test object_id=0x%08" PRIX32 " is free", phase,
+				(uint32_t)SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1);
+		}
+		return true;
+	}
+
+	LOG_WRN("%s: deleting reserved Demo09 test object_id=0x%08" PRIX32
+		"; DeleteSecureObject writes SE05x NVM metadata",
+		phase != NULL ? phase : "cleanup",
+		(uint32_t)SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1);
+
+	sw = Se05x_API_DeleteSecureObject(se_session, SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1);
+	if (sw != SM_OK) {
+		se05x_demo_mark_fail_sw(stats, "DeleteSecureObject(WALLET_TEST_KEY)", sw);
+		return false;
+	}
+
+	se05x_demo_mark_pass(stats, "DeleteStaleWalletTestObject");
+	return true;
+}
+
 static void generate_transient_key_and_sign(se05x_demo_stats_t *stats,
 					    ex_sss_boot_ctx_t *boot_ctx,
 					    pSe05xSession_t se_session)
 {
-	SE05x_Result_t exists = kSE05x_Result_NA;
-	smStatus_t sw;
 	sss_object_t wallet_key = { 0 };
 	sss_asymmetric_t sign_ctx = { 0 };
 	sss_asymmetric_t verify_ctx = { 0 };
@@ -125,19 +162,10 @@ static void generate_transient_key_and_sign(se05x_demo_stats_t *stats,
 	size_t signature_len = sizeof(signature);
 	sss_status_t status;
 
-	sw = Se05x_API_CheckObjectExists(se_session, SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1,
-					 &exists);
-	if (sw != SM_OK) {
-		se05x_demo_mark_fail_sw(stats, "CheckObjectExists(WALLET_TEST_KEY)", sw);
+	if (!delete_wallet_test_object_if_exists(stats, se_session, "before generate")) {
 		return;
 	}
-	if (exists == kSE05x_Result_SUCCESS) {
-		LOG_ERR("object_id=0x%08" PRIX32 " already exists; abort to avoid touching unknown object",
-			(uint32_t)SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1);
-		se05x_demo_mark_fail_sw(stats, "WalletTestObjectIdAlreadyExists", SM_NOT_OK);
-		return;
-	}
-	se05x_demo_mark_pass(stats, "WalletTestObjectIdFree");
+	se05x_demo_mark_pass(stats, "WalletTestObjectIdReady");
 
 	status = sss_key_object_init(&wallet_key, &boot_ctx->ks);
 	if (status != kStatus_SSS_Success) {
@@ -201,6 +229,7 @@ cleanup:
 		sss_asymmetric_context_free(&verify_ctx);
 	}
 	sss_key_object_free(&wallet_key);
+	(void)delete_wallet_test_object_if_exists(stats, se_session, "after test");
 }
 
 static sss_status_t run_wallet_curve_check(ex_sss_boot_ctx_t *boot_ctx)
@@ -212,7 +241,7 @@ static sss_status_t run_wallet_curve_check(ex_sss_boot_ctx_t *boot_ctx)
 	se05x_demo_stats_init(&stats, "WALLET_CURVE_CHECK");
 	LOG_INF("WALLET_CURVE_CHECK started: secp256k1 curve enable + transient sign/verify");
 	LOG_WRN("This demo may write SE05x NVM once if secp256k1 is NOT_SET");
-	LOG_INF("Transient test key object_id=0x%08" PRIX32 " disappears when session closes",
+	LOG_INF("Transient test key object_id=0x%08" PRIX32 " is reserved for Demo09 cleanup",
 		(uint32_t)SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1);
 
 	ensure_secp256k1_curve(&stats, se_session);

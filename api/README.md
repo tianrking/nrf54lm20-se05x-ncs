@@ -446,6 +446,23 @@ smStatus_t Se05x_API_CheckObjectExists(pSe05xSession_t session_ctx,
 | 返回值 | `SM_OK` 表示查询命令成功；查询成功不等于对象一定存在，需要继续看 `presult`。 |
 | 本工程处理 | Demo 00 中作为 UART 单项查询；Demo 01 中作为 pass/skip 检查；Demo 03 用于 inventory；Demo 04/05 用于业务流程前置校验；Demo 06/07/08 用于写入前防覆盖和依赖对象检查。 |
 
+### `Se05x_API_DeleteSecureObject`
+
+```c
+smStatus_t Se05x_API_DeleteSecureObject(pSe05xSession_t session_ctx,
+                                        uint32_t objectID);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 删除指定 SE05x secure object。 |
+| 使用 demo | Demo 09，仅用于清理保留测试对象 `0xEF090001`。 |
+| `session_ctx` | 输入参数。SE05x session，必须已经通过 Platform SCP03 打开。 |
+| `objectID` | 输入参数。要删除的 secure object ID。Demo 09 固定只传 `SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1`，也就是 `0xEF090001`。 |
+| 返回值 | `SM_OK` 表示删除 APDU 成功；其他值表示对象不存在、权限不允许、对象状态不允许删除或 APDU 失败。 |
+| NVM 风险 | 这是写 SE05x persistent NVM 的 API。Demo 09 不做通用删除，不 DeleteAll，只在自己的测试 ID 残留或测试结束时清理 `0xEF090001`，避免重复运行时测试对象 ID 冲突。 |
+| 业务含义 | 生产代码不能拿这个接口随意删除业务 key/cert。真实产品必须有 object ID 映射、权限策略、备份登记和清理确认流程。 |
+
 ### `Se05x_API_GetFreeMemory`
 
 ```c
@@ -789,6 +806,7 @@ void sss_asymmetric_context_free(sss_asymmetric_t *context);
 | `Se05x_API_GetRandom()` | 是，命令 `AT+3` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce | 否 | 否 | 否 | 否 |
 | `Se05x_API_ReadObject(UNIQUE_ID)` | 是，命令 `AT+4` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
 | `Se05x_API_CheckObjectExists()` | 是，命令 `AT+5/6/7` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature | 是，ECC key | 是，cert | 是，key/cert | 是，测试 key ID |
+| `Se05x_API_DeleteSecureObject()` | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 否 | 是，仅清理 `0xEF090001` |
 | `Se05x_API_GetFreeMemory()` | 是，命令 `AT+8/9/A` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
 | `Se05x_API_ReadIDList()` | 是，命令 `AT+E` | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 | 否 |
 | `Se05x_API_ReadECCurveList()` | 是，命令 `AT+B` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 | 是，检查 secp256k1 |
