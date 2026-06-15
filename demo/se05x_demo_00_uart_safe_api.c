@@ -62,13 +62,18 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  *   英文 ASCII，避免串口工具编码不是 UTF-8 时出现中文乱码。
  *
  * 串口输入策略：
- *   只接受文本模式发送的单字符命令，例如 3、a、b、e、q。代码只把大写字母归一化成
- *   小写字母；非文本控制字节不会被猜成数字命令。这样如果串口工具误开了 hex/raw
- *   发送模式，固件会明确提示 Unknown command，而不是误执行某个 API。
+ *   推荐使用文本模式发送单字符命令，例如 3、a、b、e、q；命令后面可以带回车或换行，
+ *   本 demo 会自动跳过。为了兼容部分串口工具的 hex/raw 发送模式，代码也接受单字节
+ *   数字控制值 0..9，并把它们归一化成字符 '0'..'9'。无论输入来自哪种模式，串口界面
+ *   都只打印“执行了哪个 SE05x API、API 返回了什么”，不输出编码细节。
  */
 
 static int normalize_uart_command(int ch)
 {
+	if (ch >= 0x00 && ch <= 0x09) {
+		return '0' + ch;
+	}
+
 	if (ch >= 'A' && ch <= 'Z') {
 		return ch + ('a' - 'A');
 	}
@@ -162,7 +167,7 @@ static void print_api_call(int cmd)
 		return;
 	}
 
-	printk("Unknown command. Use text mode and type 0 or h for help.\n");
+	printk("Unknown command. Type 0 or h for help.\n");
 }
 
 static void print_hex_bytes(const char *label, const uint8_t *data, size_t data_len)
@@ -200,7 +205,7 @@ static void print_menu(void)
 	printk("e     : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
 	printk("q     : Quit Demo 00 and close the SE05x session\n");
 	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
-	printk("Input: use text mode and send one command, for example 3, then this demo calls the matching API.\n");
+	printk("Input: send one command, for example 3. Line ending is optional.\n");
 	printk("=======================================================\n");
 }
 
