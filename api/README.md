@@ -7,8 +7,9 @@
 - Zephyr I2C backend API。
 - demo framework API。
 - 当前 demo 调用到的 SE05x APDU API。
+- Demo 06/07/08 调用到的 SSS key object、key store、asymmetric sign/verify API。
 
-NXP Plug & Trust hostlib 内部还有大量未使用的对象创建、密钥导入、签名、加密、TLS、证书等 API。那些 API 暂时不在本文档范围内，避免把未验证接口写成项目能力。后续新增 demo 时，再把对应 API 按同样格式补进来。
+NXP Plug & Trust hostlib 内部还有更多未使用的加密、TLS、证书链和策略 API。本文只说明本工程已经在代码里调用并构建验证过的 API，避免把未验证接口写成项目能力。
 
 ## 总体调用链
 
@@ -402,12 +403,12 @@ smStatus_t Se05x_API_CheckObjectExists(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 检查指定 secure object 是否存在。 |
-| 使用 demo | Demo 01、Demo 03、Demo 04、Demo 05。 |
+| 使用 demo | Demo 01、Demo 03、Demo 04、Demo 05、Demo 06、Demo 07、Demo 08。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `objectID` | 输入参数。对象 ID。当前检查 `UNIQUE_ID`、`FEATURE`、`PLATFORM_SCP`。 |
 | `presult` | 输出参数。`kSE05x_Result_SUCCESS` 表示存在；`kSE05x_Result_FAILURE` 表示不存在。 |
 | 返回值 | `SM_OK` 表示查询命令成功；查询成功不等于对象一定存在，需要继续看 `presult`。 |
-| 本工程处理 | Demo 01 中作为 pass/skip 检查；Demo 03 用于 inventory；Demo 04/05 用于业务流程前置校验。 |
+| 本工程处理 | Demo 01 中作为 pass/skip 检查；Demo 03 用于 inventory；Demo 04/05 用于业务流程前置校验；Demo 06/07/08 用于写入前防覆盖和依赖对象检查。 |
 
 ### `Se05x_API_GetFreeMemory`
 
@@ -441,7 +442,7 @@ smStatus_t Se05x_API_ReadIDList(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x 对象 ID 列表。NXP 注释说明 `idlist` 是包含 4 字节 object identifier 的字节数组。 |
-| 使用 demo | Demo 01、Demo 03、Demo 05。 |
+| 使用 demo | Demo 01、Demo 03。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `outputOffset` | 输入参数。列表读取偏移。本工程传 `0`。 |
 | `filter` | 输入参数。过滤条件。本工程传 `0xFF`。 |
@@ -480,7 +481,7 @@ smStatus_t Se05x_API_ReadCryptoObjectList(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x crypto object 列表。crypto object 通常用于临时密码运算上下文。 |
-| 使用 demo | Demo 01、Demo 03。 |
+| 使用 demo | Demo 01、Demo 03、Demo 05。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `idlist` | 输出 buffer，保存 crypto object 列表数据。 |
 | `pidlistLen` | 输入输出参数。调用前是 buffer 容量；调用后是实际返回长度。 |
@@ -505,22 +506,230 @@ smStatus_t Se05x_API_ReadState(pSe05xSession_t session_ctx,
 | 返回值 | `SM_OK` 表示成功；其他值表示 APDU 失败或当前配置不支持。 |
 | 本工程处理 | Demo 01 中作为只读检查；Demo 02/04 中作为快速检查最后的状态闭环，失败时按 skip 处理。 |
 
+## SSS key/certificate/sign API
+
+下面这些 API 从 Demo 06 开始使用。它们运行在 `ex_sss_boot_open()` 和 `ex_sss_key_store_and_object_init()` 之后，依赖 `boot_ctx->session` 和 `boot_ctx->ks` 已经有效。
+
+### `sss_key_object_init`
+
+```c
+sss_status_t sss_key_object_init(sss_object_t *keyObject,
+                                 sss_key_store_t *keyStore);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 初始化一个 SSS key object 句柄，并把它绑定到当前 key store。 |
+| 使用 demo | Demo 06、Demo 07、Demo 08。 |
+| `keyObject` | 输出参数。调用前通常清零；调用成功后可用于 allocate/get/set/sign/read。 |
+| `keyStore` | 输入参数。本工程使用 `&boot_ctx->ks`。 |
+| 返回值 | `kStatus_SSS_Success` 表示成功；其他值表示 key store 或对象类型不匹配。 |
+
+### `sss_key_object_allocate_handle`
+
+```c
+sss_status_t sss_key_object_allocate_handle(sss_object_t *keyObject,
+                                            uint32_t keyId,
+                                            sss_key_part_t keyPart,
+                                            sss_cipher_type_t cipherType,
+                                            size_t keyByteLenMax,
+                                            uint32_t options);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 为一个新对象分配 SSS handle。对 SE05x persistent object 来说，这是写 key/cert 前的准备动作。 |
+| 使用 demo | Demo 06、Demo 07。 |
+| `keyObject` | 输入输出参数，必须已经 `sss_key_object_init()`。 |
+| `keyId` | 输入参数。Demo 06 使用 `0xEF060001`；Demo 07 使用 `0xEF070001`。 |
+| `keyPart` | 输入参数。ECC 私钥对使用 `kSSS_KeyPart_Pair`；证书 binary object 使用 `kSSS_KeyPart_Default`。 |
+| `cipherType` | 输入参数。ECC 使用 `kSSS_CipherType_EC_NIST_P`；证书存储使用 `kSSS_CipherType_Binary`。 |
+| `keyByteLenMax` | 输入参数。对象最大长度，ECC demo key 使用 DER 私钥长度，证书使用 DER 证书长度。 |
+| `options` | 输入参数。`kKeyObject_Mode_Persistent` 会写 persistent NVM；`kKeyObject_Mode_Transient` 只在当前 session 保留。 |
+| 返回值 | `kStatus_SSS_Success` 表示 handle 分配成功；失败时不应继续写入。 |
+| NVM 风险 | 当 `options` 是 persistent 时，后续 `sss_key_store_set_key()` 会创建或更新 SE05x NVM 对象。本工程先 `CheckObjectExists()`，已有对象不覆盖。 |
+
+### `sss_key_object_get_handle`
+
+```c
+sss_status_t sss_key_object_get_handle(sss_object_t *keyObject,
+                                       uint32_t keyId);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 获取已经存在的 SE05x object handle。 |
+| 使用 demo | Demo 06、Demo 07、Demo 08。 |
+| `keyObject` | 输入输出参数，必须已经 `sss_key_object_init()`。 |
+| `keyId` | 输入参数。要获取的 object ID。 |
+| 返回值 | `kStatus_SSS_Success` 表示对象存在且 handle 可用；失败表示对象不存在、类型不可识别或权限/通信失败。 |
+| 本工程处理 | Demo 06/07 已有对象时使用它复用对象；Demo 08 用它加载 TLS key/cert 依赖。 |
+
+### `sss_key_store_set_key`
+
+```c
+sss_status_t sss_key_store_set_key(sss_key_store_t *keyStore,
+                                   sss_object_t *keyObject,
+                                   const uint8_t *data,
+                                   size_t dataLen,
+                                   size_t keyBitLen,
+                                   void *options,
+                                   size_t optionsLen);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 把 key/cert/binary 数据写入 key store 对应对象。 |
+| 使用 demo | Demo 06、Demo 07。 |
+| `keyStore` | 输入参数。本工程使用 `&boot_ctx->ks`。 |
+| `keyObject` | 输入参数。必须已经 allocate handle。 |
+| `data` | 输入参数。Demo 06 是 P-256 demo 私钥 DER；Demo 07 是 DER demo certificate。 |
+| `dataLen` | 输入参数。数据字节长度。 |
+| `keyBitLen` | 输入参数。ECC 使用 `256`；证书 binary object 使用 `dataLen * 8`。 |
+| `options/optionsLen` | 当前工程传 `NULL/0`。 |
+| 返回值 | `kStatus_SSS_Success` 表示写入成功。 |
+| NVM 风险 | 对 persistent object 调用会写 SE05x NVM。本工程只在对象不存在时写入，避免覆盖已有对象。 |
+
+### `sss_key_store_get_key`
+
+```c
+sss_status_t sss_key_store_get_key(sss_key_store_t *keyStore,
+                                   sss_object_t *keyObject,
+                                   uint8_t *data,
+                                   size_t *dataLen,
+                                   size_t *pKeyBitLen);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 从 key store 读取对象数据。证书/binary object 可读；私钥通常不应可读。 |
+| 使用 demo | Demo 07、Demo 08。 |
+| `keyStore` | 输入参数。本工程使用 `&boot_ctx->ks`。 |
+| `keyObject` | 输入参数。要读取的对象 handle。 |
+| `data` | 输出 buffer。 |
+| `dataLen` | 输入输出参数。调用前是 buffer 容量；调用后是实际读取长度。 |
+| `pKeyBitLen` | 输出参数。返回对象 bit length。 |
+| 返回值 | `kStatus_SSS_Success` 表示读取成功。 |
+| 本工程处理 | Demo 07 读取后逐字节比较；Demo 08 读取证书用于模拟 TLS Certificate 消息。 |
+
+### `sss_key_object_free`
+
+```c
+void sss_key_object_free(sss_object_t *keyObject);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 释放本地 SSS object handle。 |
+| 使用 demo | Demo 06、Demo 07、Demo 08。 |
+| `keyObject` | 输入参数。已经 init/get/allocate 过的对象句柄。 |
+| 返回值 | 无。 |
+| 注意 | 对 persistent object 来说，这只是释放本地 handle，不等于删除 SE05x NVM 对象。 |
+
+### `sss_asymmetric_context_init`
+
+```c
+sss_status_t sss_asymmetric_context_init(sss_asymmetric_t *context,
+                                         sss_session_t *session,
+                                         sss_object_t *keyObject,
+                                         sss_algorithm_t algorithm,
+                                         sss_mode_t mode);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 初始化非对称签名/验签上下文。 |
+| 使用 demo | Demo 06、Demo 08。 |
+| `context` | 输出参数。签名或验签上下文。 |
+| `session` | 输入参数。本工程使用 `&boot_ctx->session`。 |
+| `keyObject` | 输入参数。签名时是 ECC private key object；验签时是 public key object。 |
+| `algorithm` | 输入参数。本工程使用 `kAlgorithm_SSS_SHA256`，表示传入的是 SHA-256 digest。 |
+| `mode` | 输入参数。签名用 `kMode_SSS_Sign`；验签用 `kMode_SSS_Verify`。 |
+| 返回值 | `kStatus_SSS_Success` 表示 context 初始化成功。 |
+
+### `sss_asymmetric_sign_digest`
+
+```c
+sss_status_t sss_asymmetric_sign_digest(sss_asymmetric_t *context,
+                                        uint8_t *digest,
+                                        size_t digestLen,
+                                        uint8_t *signature,
+                                        size_t *signatureLen);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 用 SE05x 内私钥对 digest 做 ECDSA 签名。 |
+| 使用 demo | Demo 06、Demo 08。 |
+| `context` | 输入参数。必须是 sign mode。 |
+| `digest` | 输入参数。待签名 digest。本工程使用 32 字节示例 digest。 |
+| `digestLen` | 输入参数。digest 长度，当前为 32。 |
+| `signature` | 输出 buffer。保存 DER/编码后的签名数据。 |
+| `signatureLen` | 输入输出参数。调用前是 signature buffer 容量；调用后是实际签名长度。 |
+| 返回值 | `kStatus_SSS_Success` 表示签名成功。 |
+| 业务意义 | 对应云端 challenge 签名或 TLS CertificateVerify 签名。 |
+
+### `sss_asymmetric_verify_digest`
+
+```c
+sss_status_t sss_asymmetric_verify_digest(sss_asymmetric_t *context,
+                                          uint8_t *digest,
+                                          size_t digestLen,
+                                          uint8_t *signature,
+                                          size_t signatureLen);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 用公钥验证 digest/signature 是否匹配。 |
+| 使用 demo | Demo 06。 |
+| `context` | 输入参数。必须是 verify mode。 |
+| `digest` | 输入参数。原始 digest。 |
+| `digestLen` | 输入参数。digest 长度。 |
+| `signature` | 输入参数。待验证签名。 |
+| `signatureLen` | 输入参数。签名长度。 |
+| 返回值 | `kStatus_SSS_Success` 表示验签成功；失败表示签名不匹配或对象/算法不匹配。 |
+| 本工程处理 | Demo 06 用 transient public key 验证 SE 内私钥签名，证明 key pair 和签名链路成立。 |
+
+### `sss_asymmetric_context_free`
+
+```c
+void sss_asymmetric_context_free(sss_asymmetric_t *context);
+```
+
+| 项目 | 说明 |
+| --- | --- |
+| 作用 | 释放非对称签名/验签上下文。 |
+| 使用 demo | Demo 06、Demo 08。 |
+| `context` | 输入参数。已经 init 的 asymmetric context。 |
+| 返回值 | 无。 |
+
 ## Demo 与 API 对应表
 
-| API | Demo 01 | Demo 02 | Demo 03 | Demo 04 | Demo 05 |
-| --- | --- | --- | --- | --- | --- |
-| `ex_sss_boot_open()` | 前置 | 前置 | 前置 | 前置 | 前置 |
-| `ex_sss_key_store_and_object_init()` | 前置 | 前置 | 前置 | 前置 | 前置 |
-| `Se05x_API_GetVersion()` | 是 | 是 | 是 | 是 | 是 |
-| `Se05x_API_GetExtVersion()` | 是 | 否 | 否 | 否 | 否 |
-| `Se05x_API_GetRandom()` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce |
-| `Se05x_API_ReadObject(UNIQUE_ID)` | 是 | 是 | 否 | 是 | 否 |
-| `Se05x_API_CheckObjectExists()` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature |
-| `Se05x_API_GetFreeMemory()` | 是 | 否 | 是 | 否 | 是 |
-| `Se05x_API_ReadIDList()` | 是 | 否 | 是 | 否 | 否 |
-| `Se05x_API_ReadECCurveList()` | 是 | 否 | 是 | 否 | 是 |
-| `Se05x_API_ReadCryptoObjectList()` | 是 | 否 | 是 | 否 | 是 |
-| `Se05x_API_ReadState()` | 是 | 是 | 否 | 是 | 否 |
+| API | Demo 01 | Demo 02 | Demo 03 | Demo 04 | Demo 05 | Demo 06 | Demo 07 | Demo 08 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `ex_sss_boot_open()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
+| `ex_sss_key_store_and_object_init()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
+| `Se05x_API_GetVersion()` | 是 | 是 | 是 | 是 | 是 | 否 | 否 | 否 |
+| `Se05x_API_GetExtVersion()` | 是 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_GetRandom()` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce | 否 | 否 | 否 |
+| `Se05x_API_ReadObject(UNIQUE_ID)` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
+| `Se05x_API_CheckObjectExists()` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature | 是，ECC key | 是，cert | 是，key/cert |
+| `Se05x_API_GetFreeMemory()` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
+| `Se05x_API_ReadIDList()` | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_ReadECCurveList()` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
+| `Se05x_API_ReadCryptoObjectList()` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
+| `Se05x_API_ReadState()` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
+| `sss_key_object_init()` | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 |
+| `sss_key_object_allocate_handle()` | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 否 |
+| `sss_key_object_get_handle()` | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 |
+| `sss_key_store_set_key()` | 否 | 否 | 否 | 否 | 否 | 是，写 ECC key | 是，写 cert | 否 |
+| `sss_key_store_get_key()` | 否 | 否 | 否 | 否 | 否 | 否 | 是，读 cert | 是，读 cert |
+| `sss_key_object_free()` | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 |
+| `sss_asymmetric_context_init()` | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 |
+| `sss_asymmetric_sign_digest()` | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 |
+| `sss_asymmetric_verify_digest()` | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 否 |
+| `sss_asymmetric_context_free()` | 否 | 否 | 否 | 否 | 否 | 是 | 否 | 是 |
 
 ## 新增 API 文档规则
 

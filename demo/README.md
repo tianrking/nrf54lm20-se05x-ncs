@@ -4,8 +4,9 @@
 
 当前 demo 的共同原则：
 
-- 默认不写 SE05x persistent NVM。
-- 默认不创建、更新或删除 SE05x 对象。
+- Demo 01-05 默认不写 SE05x persistent NVM。
+- Demo 06/07 是写入型 demo，会写固定 demo object ID，已有对象时不覆盖。
+- Demo 08 不新写对象，只复用 Demo 06/07 已准备好的 key 和 certificate。
 - 先验证安全会话，再调用 APDU/SSS API。
 - 每个 demo 都输出 pass、skip、fail 统计，便于现场判断。
 
@@ -18,6 +19,9 @@
 | 03 | `se05x_demo_03_inventory.c` | `inventory` | 查看能力、对象、曲线、crypto object 和空间。 | 否 |
 | 04 | `se05x_demo_04_business_onboarding.c` | `business_onboarding` | 真实设备注册、产测上报、云端绑定前置流程。 | 否 |
 | 05 | `se05x_demo_05_provisioning_check.c` | `provisioning_check` | 应用私钥、证书、TLS 身份写入前的业务预检。 | 否 |
+| 06 | `se05x_demo_06_ecc_sign_verify.c` | `ecc_sign_verify` | SE 内 ECC 私钥签名、外部公钥验签。 | 是，写 `0xEF060001` |
+| 07 | `se05x_demo_07_certificate_store.c` | `certificate_store` | 设备证书对象写入、回读和内容校验。 | 是，写 `0xEF070001` |
+| 08 | `se05x_demo_08_tls_client_identity.c` | `tls_client_identity` | TLS 客户端身份材料检查和 handshake digest 签名。 | 否，复用 06/07 |
 
 ## 代码对应关系
 
@@ -28,6 +32,9 @@
 | Demo 03 | `se05x_demo_03_inventory.c` | `run_inventory()` | `g_se05x_demo_inventory` | 版本能力、对象检查、空间、曲线、crypto object、对象列表。 |
 | Demo 04 | `se05x_demo_04_business_onboarding.c` | `run_business_onboarding()` | `g_se05x_demo_business_onboarding` | 注册身份字段、Platform SCP 对象、注册 nonce、状态。 |
 | Demo 05 | `se05x_demo_05_provisioning_check.c` | `run_provisioning_check()` | `g_se05x_demo_provisioning_check` | 写入前能力、保留对象、空间、曲线、crypto object、工站 nonce。 |
+| Demo 06 | `se05x_demo_06_ecc_sign_verify.c` | `run_ecc_sign_verify()` | `g_se05x_demo_ecc_sign_verify` | persistent ECC key、transient public key、ECDSA sign/verify。 |
+| Demo 07 | `se05x_demo_07_certificate_store.c` | `run_certificate_store()` | `g_se05x_demo_certificate_store` | persistent binary certificate object、write/read/compare。 |
+| Demo 08 | `se05x_demo_08_tls_client_identity.c` | `run_tls_client_identity()` | `g_se05x_demo_tls_client_identity` | key/cert object check、certificate read、TLS digest sign。 |
 
 所有 demo 都通过 `demo/se05x_demo.c` 中的 demo catalog 注册，再由 `src/main.c` 根据 `APP_SELECTED_DEMO` 查找并调用 `demo->run(&s_boot_ctx)`。所以 README 中的流程图、demo 编号、源码文件和串口日志名称是一一对应的。
 
@@ -425,32 +432,198 @@ PROVISIONING_CHECK summary: pass=... skip=... fail=0
 Demo provisioning_check 总体结果：OK
 ```
 
-## 写入型业务 demo 规划
+## Demo 06：ecc_sign_verify
 
-Demo 04/05 已经覆盖真实业务的前置流程，但还没有真正写入应用 key 或证书。后续如果要覆盖完整产品用法，建议继续按 06/07/08 增加写入型 demo。
+文件：`se05x_demo_06_ecc_sign_verify.c`
 
-| 编号 | 建议名称 | 是否必须写 persistent NVM | 真实业务场景 | 建议实现策略 |
-| --- | --- | --- | --- | --- |
-| 06 | `ecc_sign_verify` | 不一定 | 设备挑战签名、云端验签、证明私钥在 SE 内。 | 先做 transient key 版本，不写 NVM；确认 API 和签名流程后，再增加 persistent key 版本。 |
-| 07 | `certificate_store` | 通常会写 | 保存设备证书、证书链或业务公钥材料。 | 先只读检查空间和 object ID；真正导入证书时必须固定 object ID，并说明覆盖/删除策略。 |
-| 08 | `tls_client_identity` | 通常会写 | TLS/云连接中使用 SE 内私钥和证书作为客户端身份。 | 依赖 06 的私钥和 07 的证书；先做流程文档和对象检查，再做真实 TLS 集成。 |
+### 真实业务场景
 
-### 06 是否一定写 NVM
+这是第一个真正使用 SE05x 应用私钥的业务 demo。它模拟设备注册、云端绑定、TLS 客户端认证中最核心的动作：私钥留在 SE05x 内，外部只给 32 字节 challenge digest，SE05x 返回 ECDSA 签名，外部用公钥验签。
 
-不一定。ECC 签名验签可以分两版：
+当前 demo 会写 SE05x persistent NVM：
 
-- **06A transient ECC demo**：创建临时 key 或使用临时 crypto context，复位/关闭 session 后不保留，适合安全验证 API 流程。
-- **06B persistent ECC demo**：把应用私钥长期保存在 SE05x persistent NVM 中，真实产品会用这个方式保存设备私钥。
+| 项目 | 值 |
+| --- | --- |
+| 私钥 object ID | `0xEF060001` |
+| 公钥 object ID | `0xEF060002`，transient，session 结束后消失 |
+| 曲线 | NIST P-256 |
+| 私钥来源 | NXP 示例 P-256 demo 私钥，只用于开发验证 |
+| 覆盖策略 | 已存在时不覆盖，只 `sss_key_object_get_handle()` 复用 |
+| 生产替换 | 量产时应改为工站注入或 SE 内生成，不应使用仓库里的 demo 私钥 |
 
-建议先做 06A，因为它不会污染 SE05x，不会占用长期 object ID，也不会因为策略写错导致对象难以恢复。
+### 使用到的 SE05x/SSS 功能和 API
 
-### 07 和 08 为什么通常会写 NVM
+| 功能 | API | 代码位置 | 真实业务作用 |
+| --- | --- | --- | --- |
+| 对象存在检查 | `Se05x_API_CheckObjectExists()` | `prepare_demo_key()` | 写入前确认 `0xEF060001` 是否已存在，避免覆盖。 |
+| key object 初始化 | `sss_key_object_init()` | `prepare_demo_key()` | 把 `sss_object_t` 绑定到当前 key store。 |
+| 分配持久私钥对象 | `sss_key_object_allocate_handle()` | `prepare_demo_key()` | 为 demo 私钥分配 persistent object handle。 |
+| 写入 demo 私钥 | `sss_key_store_set_key()` | `prepare_demo_key()` | 首次运行时把 P-256 demo key 写入 SE05x。 |
+| 复用已有私钥 | `sss_key_object_get_handle()` | `prepare_demo_key()` | 再次运行时获取已有对象，不覆盖。 |
+| 签名上下文 | `sss_asymmetric_context_init()` | `sign_and_verify()` | 准备 ECDSA sign/verify context。 |
+| SE 内签名 | `sss_asymmetric_sign_digest()` | `sign_and_verify()` | 用 SE 内私钥签名 challenge digest。 |
+| 公钥验签 | `sss_asymmetric_verify_digest()` | `sign_and_verify()` | 验证签名和 demo 公钥匹配。 |
 
-证书和 TLS 身份一般需要跨重启长期存在：
+### API 流程
 
-- 设备证书需要长期保存，所以通常写 persistent object。
-- TLS client identity 通常由“SE 内私钥 + 设备证书/证书链”组成，也需要 persistent object。
-- 如果每次启动都重新导入，就不是真正的量产业务流程，而且会暴露密钥管理问题。
+```mermaid
+flowchart TD
+    A["run_ecc_sign_verify()"] --> B["CheckObjectExists 0xEF060001"]
+    B --> C{"ECC key exists?"}
+    C -->|no| D["sss_key_object_allocate_handle persistent"]
+    D --> E["sss_key_store_set_key demo P-256 private key"]
+    C -->|yes| F["sss_key_object_get_handle"]
+    E --> G["导入 transient public key 0xEF060002"]
+    F --> G
+    G --> H["sss_asymmetric_context_init Sign"]
+    H --> I["sss_asymmetric_sign_digest"]
+    I --> J["sss_asymmetric_context_init Verify"]
+    J --> K["sss_asymmetric_verify_digest"]
+    K --> L["summary"]
+```
+
+### 期望输出
+
+```text
+ECC_SIGN_VERIFY 开始
+会写 persistent NVM：object_id=0xEF060001；已有对象时不覆盖
+ECC key object_id=0xEF060001 exists=no
+ECC persistent key created=yes object_id=0xEF060001
+Signature len=... preview=...
+ECC_SIGN_VERIFY 汇总：pass=... skip=0 fail=0
+Demo ecc_sign_verify 总体结果：OK
+```
+
+## Demo 07：certificate_store
+
+文件：`se05x_demo_07_certificate_store.c`
+
+### 真实业务场景
+
+这是设备证书写入和回读校验 demo。真实 mTLS/TLS client authentication 中，设备需要把证书或证书链发给服务器，而私钥留在 SE05x 内部。本 demo 写入一个和 Demo 06 demo 私钥匹配的自签 DER 证书，用来验证“证书对象能持久保存、能回读、内容没有被截断或改写”。
+
+当前 demo 会写 SE05x persistent NVM：
+
+| 项目 | 值 |
+| --- | --- |
+| 证书 object ID | `0xEF070001` |
+| 对象类型 | SSS binary object |
+| 证书格式 | DER demo certificate，长度 408 字节 |
+| 覆盖策略 | 已存在时不覆盖，只回读比较 |
+| 冲突处理 | 已存在但内容不同会 FAIL，提醒不要覆盖未知对象 |
+| 生产替换 | 量产时应替换为 CA/工站签发的设备证书或证书链 |
+
+### 使用到的 SE05x/SSS 功能和 API
+
+| 功能 | API | 代码位置 | 真实业务作用 |
+| --- | --- | --- | --- |
+| 对象存在检查 | `Se05x_API_CheckObjectExists()` | `prepare_certificate_object()` | 写入前确认 `0xEF070001` 是否已存在。 |
+| 分配 binary object | `sss_key_object_allocate_handle()` | `prepare_certificate_object()` | 创建 persistent certificate/binary object。 |
+| 写入证书 | `sss_key_store_set_key()` | `prepare_certificate_object()` | 首次运行写入 DER demo certificate。 |
+| 回读证书 | `sss_key_store_get_key()` | `read_and_verify_certificate()` | 模拟 TLS 发送证书前从 SE05x 读取证书。 |
+| 内容校验 | `memcmp()` | `read_and_verify_certificate()` | 确认证书对象内容和 demo 证书一致。 |
+
+### API 流程
+
+```mermaid
+flowchart TD
+    A["run_certificate_store()"] --> B["CheckObjectExists 0xEF070001"]
+    B --> C{"cert exists?"}
+    C -->|no| D["sss_key_object_allocate_handle persistent binary"]
+    D --> E["sss_key_store_set_key DER cert"]
+    C -->|yes| F["sss_key_object_get_handle"]
+    E --> G["sss_key_store_get_key readback"]
+    F --> G
+    G --> H["compare len + bytes"]
+    H --> I["summary"]
+```
+
+### 期望输出
+
+```text
+CERTIFICATE_STORE 开始
+会写 persistent NVM：object_id=0xEF070001；已有对象时不覆盖
+Certificate object_id=0xEF070001 exists=no
+Certificate persistent object created=yes object_id=0xEF070001
+Certificate readback len=408 bit_len=3264
+CERTIFICATE_STORE 汇总：pass=... skip=0 fail=0
+Demo certificate_store 总体结果：OK
+```
+
+## Demo 08：tls_client_identity
+
+文件：`se05x_demo_08_tls_client_identity.c`
+
+### 真实业务场景
+
+这是 TLS/mTLS 客户端身份 demo。它不直接接入 Zephyr socket TLS，而是把 TLS 客户端身份最关键的 SE05x 调用骨架单独跑通：
+
+- 从 SE05x 读取设备证书，模拟 TLS `Certificate` 消息。
+- 用 SE 内私钥签名 32 字节 handshake digest，模拟 TLS `CertificateVerify` 消息。
+
+当前 demo 不新写 NVM。它依赖：
+
+| 依赖对象 | 来源 | 作用 |
+| --- | --- | --- |
+| `0xEF060001` | Demo 06 | TLS client private key，SE 内签名。 |
+| `0xEF070001` | Demo 07 | TLS client certificate，发给服务器。 |
+
+### 使用到的 SE05x/SSS 功能和 API
+
+| 功能 | API | 代码位置 | 真实业务作用 |
+| --- | --- | --- | --- |
+| key/cert 存在检查 | `Se05x_API_CheckObjectExists()` | `require_object()` | 确认 TLS 身份材料已经准备好。 |
+| 加载私钥 handle | `sss_key_object_get_handle()` | `load_key_handle()` | 获取 SE 内 TLS 私钥对象。 |
+| 读取证书 | `sss_key_store_get_key()` | `read_tls_certificate()` | 读取证书，模拟 TLS Certificate 发送。 |
+| TLS digest 签名 | `sss_asymmetric_sign_digest()` | `sign_tls_handshake_digest()` | 用 SE 内私钥签名 handshake digest。 |
+
+### API 流程
+
+```mermaid
+flowchart TD
+    A["run_tls_client_identity()"] --> B["CheckObjectExists TLS_KEY 0xEF060001"]
+    B --> C["CheckObjectExists TLS_CERT 0xEF070001"]
+    C --> D["sss_key_object_get_handle TLS_KEY"]
+    D --> E["sss_key_object_get_handle TLS_CERT"]
+    E --> F["sss_key_store_get_key read certificate"]
+    F --> G["sss_asymmetric_context_init Sign"]
+    G --> H["sss_asymmetric_sign_digest handshake digest"]
+    H --> I["summary"]
+```
+
+### 真实产品中的位置
+
+```mermaid
+sequenceDiagram
+    participant TLS as Zephyr TLS/Cloud Client
+    participant App as nRF54LM20 App
+    participant SE as SE05x
+    participant Cloud as TLS Server
+
+    TLS->>App: 请求客户端证书
+    App->>SE: 读取 certificate object 0xEF070001
+    App-->>TLS: 返回 DER certificate
+    Cloud->>TLS: handshake transcript digest
+    TLS->>App: 请求私钥签名
+    App->>SE: 使用 key object 0xEF060001 签名 digest
+    App-->>TLS: 返回 ECDSA signature
+    TLS-->>Cloud: Certificate + CertificateVerify
+```
+
+### 期望输出
+
+```text
+TLS_CLIENT_IDENTITY 开始
+本 demo 不新写 NVM；依赖 key=0xEF060001 cert=0xEF070001
+CheckObjectExists(TLS_KEY) object_id=0xEF060001 exists=yes
+CheckObjectExists(TLS_CERT) object_id=0xEF070001 exists=yes
+TLS certificate ready len=408 bit_len=3264
+TLS CertificateVerify signature produced
+TLS_CLIENT_IDENTITY 汇总：pass=... skip=0 fail=0
+Demo tls_client_identity 总体结果：OK
+```
+
+## 写入型 demo 安全说明
 
 ### 写 NVM 后是不是只要有密钥就 OK
 

@@ -26,6 +26,9 @@ LOG_MODULE_REGISTER(nrf54lm20_se05x, LOG_LEVEL_INF);
  *   SE05X_DEMO_INVENTORY        - 03 号示例：查看能力、保留对象和存储空间。
  *   SE05X_DEMO_BUSINESS_ONBOARDING - 04 号示例：真实设备注册/产测上报前置流程。
  *   SE05X_DEMO_PROVISIONING_CHECK  - 05 号示例：应用 key/证书写入前预检流程。
+ *   SE05X_DEMO_ECC_SIGN_VERIFY     - 06 号示例：写入 demo ECC 私钥并做签名验签。
+ *   SE05X_DEMO_CERTIFICATE_STORE   - 07 号示例：写入 demo 设备证书并回读校验。
+ *   SE05X_DEMO_TLS_CLIENT_IDENTITY - 08 号示例：用 06/07 的对象模拟 TLS 客户端身份。
  *
  * 每个具体 demo 都放在 demo/se05x_demo_xx_*.c 里。文件顶部有中文说明：
  *   - 适合什么情况使用

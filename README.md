@@ -25,13 +25,11 @@
 - NXP Plug & Trust hostlib 运行在 Nordic NCS/Zephyr 上。
 - 通过 T=1 over I2C 和 SE05x 通信。
 - 使用 Platform SCP03 建立安全会话。
-- 运行只读 demo，读取 applet 版本、唯一 ID、随机数、对象状态、曲线列表和内存状态。
+- 运行只读、写入型和 TLS 身份 demo，覆盖版本、唯一 ID、随机数、对象状态、曲线列表、内存状态、ECC 签名、证书存储和 TLS 客户端身份材料检查。
 
-当前工程刻意保持为 bring-up 示例，不包含 OTA、Bluetooth、NFC、MCUBoot 或产品业务流程。默认 demo 不写 SE05x NVM，适合先确认硬件、驱动、SCP03 和 API 适配是否可靠。
+当前工程刻意不包含 OTA、Bluetooth、NFC、MCUBoot 等无关产品功能，重点放在 nRF54LM20 和 SE05x 的安全芯片链路。默认选择的 Demo 01 不写 SE05x NVM，适合先确认硬件、驱动、SCP03 和 API 适配是否可靠。
 
-从 Demo 04 开始，工程加入真实业务流程 demo。当前阶段仍使用官方/default Platform SCP03 key/profile，不改安全配置，不写 SE05x NVM；业务 demo 先覆盖真实产品里的设备注册、产测上报、应用 key/证书写入前预检流程。后续真正写应用私钥、证书或 TLS 身份时，会新增独立写入型 demo，并显式声明 object ID 和覆盖策略。
-
-后续规划中的 Demo 06/07/08 会进入真实密钥和证书业务。它们不应该一上来就全部写 persistent NVM：Demo 06 建议先做 transient key 安全演示，再做 persistent key 版本；Demo 07/08 如果要模拟真实证书和 TLS 身份，通常会写 persistent NVM。写入型 demo 必须先定义 object ID、访问策略、覆盖策略、清理方式和密钥备份/恢复策略。详细风险说明见 [demo/README.md](demo/README.md) 的“写入型业务 demo 规划”。
+从 Demo 04 开始，工程加入真实业务流程 demo。Demo 04/05 覆盖设备注册、产测上报、应用 key/证书写入前预检；Demo 06/07/08 覆盖 SE 内 ECC 私钥签名、设备证书持久存储、TLS 客户端身份材料检查。Demo 06/07 会写固定 demo object ID，已有对象时不覆盖；Demo 08 不新写对象，只复用 06/07 的 key 和 cert。详细风险说明见 [demo/README.md](demo/README.md)。
 
 ## 当前状态
 
@@ -43,6 +41,8 @@
 | SE05x ATR | 已验证 |
 | Platform SCP03 | 已验证 |
 | 只读 demo | 已验证，`pass=13 skip=1 fail=0` |
+| 写入型 demo | 已实现并构建通过；Demo 06/07 会写 demo object ID |
+| TLS 身份 demo | 已实现并构建通过；Demo 08 复用 Demo 06/07 的对象 |
 | `ReadIDList sw=0xFFFF` | 当前按 skip 处理，不影响基础连通性结论 |
 
 ## 文档入口
@@ -145,6 +145,9 @@ flowchart TD
 | `SE05X_DEMO_INVENTORY` | Demo 03 | 查看能力、对象、曲线和空间状态。 |
 | `SE05X_DEMO_BUSINESS_ONBOARDING` | Demo 04 | 真实设备注册/产测上报前置流程。 |
 | `SE05X_DEMO_PROVISIONING_CHECK` | Demo 05 | 应用 key/证书写入前业务预检流程。 |
+| `SE05X_DEMO_ECC_SIGN_VERIFY` | Demo 06 | 写入/复用 demo ECC 私钥，做 SE 内签名和公钥验签。 |
+| `SE05X_DEMO_CERTIFICATE_STORE` | Demo 07 | 写入/复用 demo 设备证书对象，并回读校验。 |
+| `SE05X_DEMO_TLS_CLIENT_IDENTITY` | Demo 08 | 读取证书并用 SE 内私钥签名 TLS handshake digest。 |
 
 每个 demo 的详细流程见 [demo/README.md](demo/README.md)。
 

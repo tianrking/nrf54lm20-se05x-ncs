@@ -33,6 +33,9 @@ extern const se05x_demo_t g_se05x_demo_identity_random;
 extern const se05x_demo_t g_se05x_demo_inventory;
 extern const se05x_demo_t g_se05x_demo_business_onboarding;
 extern const se05x_demo_t g_se05x_demo_provisioning_check;
+extern const se05x_demo_t g_se05x_demo_ecc_sign_verify;
+extern const se05x_demo_t g_se05x_demo_certificate_store;
+extern const se05x_demo_t g_se05x_demo_tls_client_identity;
 
 static const se05x_demo_t *const g_demos[] = {
 	&g_se05x_demo_safe_read_only,
@@ -40,6 +43,9 @@ static const se05x_demo_t *const g_demos[] = {
 	&g_se05x_demo_inventory,
 	&g_se05x_demo_business_onboarding,
 	&g_se05x_demo_provisioning_check,
+	&g_se05x_demo_ecc_sign_verify,
+	&g_se05x_demo_certificate_store,
+	&g_se05x_demo_tls_client_identity,
 };
 
 #define DEMO_COUNT (sizeof(g_demos) / sizeof(g_demos[0]))

@@ -28,6 +28,9 @@
 | `SE05X_DEMO_INVENTORY` | Demo 03，查看能力、对象和空间清单。 |
 | `SE05X_DEMO_BUSINESS_ONBOARDING` | Demo 04，设备注册/产测上报前置业务流程。 |
 | `SE05X_DEMO_PROVISIONING_CHECK` | Demo 05，应用 key/证书写入前业务预检。 |
+| `SE05X_DEMO_ECC_SIGN_VERIFY` | Demo 06，写入/复用 demo ECC 私钥并做签名验签。 |
+| `SE05X_DEMO_CERTIFICATE_STORE` | Demo 07，写入/复用 demo 设备证书并回读校验。 |
+| `SE05X_DEMO_TLS_CLIENT_IDENTITY` | Demo 08，复用 Demo 06/07 对象模拟 TLS 客户端身份。 |
 
 ## 主流程
 
