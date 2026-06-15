@@ -448,6 +448,9 @@ Demo provisioning_check 总体结果：OK
 | 公钥 object ID | `0xEF060002`，transient，session 结束后消失 |
 | 曲线 | NIST P-256 |
 | 私钥来源 | NXP 示例 P-256 demo 私钥，只用于开发验证 |
+| 私钥源码变量 | `k_demo_ec_key_pair_der`，位于 `se05x_demo_06_ecc_sign_verify.c` |
+| 公钥源码变量 | `k_demo_ec_public_key_der`，位于 `se05x_demo_06_ecc_sign_verify.c` |
+| challenge digest 变量 | `k_demo_digest`，模拟云端 challenge 或 TLS transcript hash |
 | 覆盖策略 | 已存在时不覆盖，只 `sss_key_object_get_handle()` 复用 |
 | 生产替换 | 量产时应改为工站注入或 SE 内生成，不应使用仓库里的 demo 私钥 |
 
@@ -509,6 +512,7 @@ Demo ecc_sign_verify 总体结果：OK
 | 证书 object ID | `0xEF070001` |
 | 对象类型 | SSS binary object |
 | 证书格式 | DER demo certificate，长度 408 字节 |
+| 证书源码变量 | `k_demo_device_cert_der`，位于 `se05x_demo_07_certificate_store.c` |
 | 覆盖策略 | 已存在时不覆盖，只回读比较 |
 | 冲突处理 | 已存在但内容不同会 FAIL，提醒不要覆盖未知对象 |
 | 生产替换 | 量产时应替换为 CA/工站签发的设备证书或证书链 |
