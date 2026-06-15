@@ -265,8 +265,6 @@ INVENTORY summary: pass=... skip=... fail=0
 Demo inventory 总体结果：OK
 ```
 
-## 新增 demo 规范
-
 ## Demo 04：business_onboarding
 
 文件：`se05x_demo_04_business_onboarding.c`
@@ -426,6 +424,76 @@ ProvisioningNonce len=16 preview=...
 PROVISIONING_CHECK summary: pass=... skip=... fail=0
 Demo provisioning_check 总体结果：OK
 ```
+
+## 写入型业务 demo 规划
+
+Demo 04/05 已经覆盖真实业务的前置流程，但还没有真正写入应用 key 或证书。后续如果要覆盖完整产品用法，建议继续按 06/07/08 增加写入型 demo。
+
+| 编号 | 建议名称 | 是否必须写 persistent NVM | 真实业务场景 | 建议实现策略 |
+| --- | --- | --- | --- | --- |
+| 06 | `ecc_sign_verify` | 不一定 | 设备挑战签名、云端验签、证明私钥在 SE 内。 | 先做 transient key 版本，不写 NVM；确认 API 和签名流程后，再增加 persistent key 版本。 |
+| 07 | `certificate_store` | 通常会写 | 保存设备证书、证书链或业务公钥材料。 | 先只读检查空间和 object ID；真正导入证书时必须固定 object ID，并说明覆盖/删除策略。 |
+| 08 | `tls_client_identity` | 通常会写 | TLS/云连接中使用 SE 内私钥和证书作为客户端身份。 | 依赖 06 的私钥和 07 的证书；先做流程文档和对象检查，再做真实 TLS 集成。 |
+
+### 06 是否一定写 NVM
+
+不一定。ECC 签名验签可以分两版：
+
+- **06A transient ECC demo**：创建临时 key 或使用临时 crypto context，复位/关闭 session 后不保留，适合安全验证 API 流程。
+- **06B persistent ECC demo**：把应用私钥长期保存在 SE05x persistent NVM 中，真实产品会用这个方式保存设备私钥。
+
+建议先做 06A，因为它不会污染 SE05x，不会占用长期 object ID，也不会因为策略写错导致对象难以恢复。
+
+### 07 和 08 为什么通常会写 NVM
+
+证书和 TLS 身份一般需要跨重启长期存在：
+
+- 设备证书需要长期保存，所以通常写 persistent object。
+- TLS client identity 通常由“SE 内私钥 + 设备证书/证书链”组成，也需要 persistent object。
+- 如果每次启动都重新导入，就不是真正的量产业务流程，而且会暴露密钥管理问题。
+
+### 写 NVM 后是不是只要有密钥就 OK
+
+不完全是。这里要分清几类密钥和记录：
+
+| 密钥/记录 | 作用 | 丢失后影响 |
+| --- | --- | --- |
+| Platform SCP03 key | 用来打开管理/平台安全通道。当前工程先使用官方/default 配置。 | 如果生产后换成自有 SCP03 key 且丢失，可能无法再管理、更新、删除或重新 provision 对象。 |
+| SE 内应用私钥 | 用于设备签名、TLS client auth、业务认证。通常不可导出。 | 如果对象被删或 SE 损坏，设备身份无法恢复，只能重新注册或报废该身份。 |
+| 对象访问策略 | 决定对象能否读、写、删除、使用、认证后使用。 | 策略写错可能导致对象不能更新、不能删除或不能按预期使用。 |
+| object ID 映射表 | 记录每个业务对象写在哪个 ID。 | 丢失映射会导致后续升级、删除、证书轮换非常危险。 |
+| 云端绑定记录 | 记录 unique ID、公钥、证书序列号和业务账号关系。 | SE 里对象还在，但云端可能不认这台设备。 |
+
+所以不是“有密钥就一定 OK”。真实量产至少要保存：
+
+1. SCP03 key 或能重新建立管理会话的凭据。
+2. 每个 object ID 的用途、策略、生命周期和版本。
+3. 设备 unique ID、证书序列号、公钥摘要、云端绑定记录。
+4. 工站写入日志和失败恢复策略。
+
+### 密钥丢了是不是 SE 就废了
+
+看丢的是哪一个：
+
+- **丢了 Platform SCP03 管理 key**：SE 不一定物理报废，但后续可能无法重新 provision、删除对象、轮换证书或恢复出厂。对生产来说，这颗设备可能等同不可维护。
+- **丢了云端登记记录**：SE 里对象还在，但云端不认它，业务身份可能需要重新注册。
+- **丢了应用私钥备份**：正常情况下应用私钥本来就不应该有明文备份；如果私钥只存在 SE 内，这是安全设计。真正要备份的是公钥、证书、object ID 和注册关系。
+- **写错对象策略且没有删除权限**：这最危险，可能导致对象占住 NVM，后续无法覆盖，只能换 object ID，严重时影响量产一致性。
+
+### 写入型 demo 的安全规则
+
+写入型 demo 合入前必须满足：
+
+1. 默认不覆盖已有生产 object ID。
+2. object ID 使用 `DEMO_` 或测试范围，并在 README 中明确列出。
+3. 首次写入前先 `CheckObjectExists()`。
+4. 如果对象已存在，默认退出，不自动覆盖。
+5. 单独提供清理 demo 或清理开关，不能默认删除。
+6. 串口日志必须打印 object ID、策略、是否 persistent、是否可删除。
+7. README 必须写清“这个 demo 会写 NVM”。
+8. 生产 key 和测试 key 必须分开，不能把生产 key 写死进仓库。
+
+## 新增 demo 规范
 
 新增 demo 时建议遵循：
 

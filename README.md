@@ -31,6 +31,8 @@
 
 从 Demo 04 开始，工程加入真实业务流程 demo。当前阶段仍使用官方/default Platform SCP03 key/profile，不改安全配置，不写 SE05x NVM；业务 demo 先覆盖真实产品里的设备注册、产测上报、应用 key/证书写入前预检流程。后续真正写应用私钥、证书或 TLS 身份时，会新增独立写入型 demo，并显式声明 object ID 和覆盖策略。
 
+后续规划中的 Demo 06/07/08 会进入真实密钥和证书业务。它们不应该一上来就全部写 persistent NVM：Demo 06 建议先做 transient key 安全演示，再做 persistent key 版本；Demo 07/08 如果要模拟真实证书和 TLS 身份，通常会写 persistent NVM。写入型 demo 必须先定义 object ID、访问策略、覆盖策略、清理方式和密钥备份/恢复策略。详细风险说明见 [demo/README.md](demo/README.md) 的“写入型业务 demo 规划”。
+
 ## 当前状态
 
 | 项目 | 状态 |
