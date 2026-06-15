@@ -1,0 +1,235 @@
+#include <inttypes.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include <zephyr/logging/log.h>
+
+#include "fsl_sss_se05x_types.h"
+#include "se05x_APDU.h"
+#include "se05x_APDU_apis.h"
+#include "se05x_demo.h"
+#include "se05x_ecc_curves.h"
+#include "se05x_enums.h"
+
+LOG_MODULE_REGISTER(se05x_demo_wallet_curve, LOG_LEVEL_INF);
+
+/*
+ * Demo 09: wallet_curve_check.
+ *
+ * 中文说明：
+ * 这个 demo 用来研究当前 SE05x/SE052_B501 是否可以支持 BTC/ETH 需要的
+ * secp256k1 曲线。它不是完整硬件钱包 demo，也不会解析交易、派生地址或广播交易。
+ *
+ * NVM 边界：
+ * - 会在 secp256k1 当前 NOT_SET 时调用 Se05x_API_CreateCurve_secp256k1()。
+ * - CreateCurve + SetECCurveParam 会写 SE05x persistent NVM。
+ * - 如果 secp256k1 已经 SET，本 demo 不会重复创建曲线。
+ * - 测试 key 使用 transient object，session 关闭后消失，不写 persistent 私钥。
+ * - 不删除曲线，不 DeleteAll，不循环重试。
+ *
+ * 为什么要单独做这个 demo：
+ * Demo 00 只能安全只读查询，已经证明当前 Secp256k1 是 NOT_SET。Demo 09 则是
+ * 明确写 NVM 的研究型 demo，用来回答“这颗 SE 当前配置是否允许启用 secp256k1，
+ * 并是否能进一步生成 transient secp256k1 key 做 ECDSA sign/verify”。
+ *
+ * 判断含义：
+ * - 如果曲线创建失败，说明当前 OEF/权限/配置不允许应用侧启用 secp256k1。
+ * - 如果曲线 SET 但 key/sign 失败，说明钱包还不能走 SE 原生 BTC/ETH 私钥签名。
+ * - 如果曲线 SET、transient key generate、sign/verify 都成功，说明 SE 原生
+ *   secp256k1 ECDSA 基础链路成立。BTC/ETH 仍需补交易解析、hash、地址、公钥导出、
+ *   DER/r|s 转换、low-S、Ethereum recovery id 等钱包协议层。
+ */
+
+static uint8_t k_wallet_digest[32] = {
+	0x57, 0x41, 0x4c, 0x4c, 0x45, 0x54, 0x2d, 0x53,
+	0x45, 0x43, 0x50, 0x32, 0x35, 0x36, 0x4b, 0x31,
+	0x2d, 0x44, 0x45, 0x4d, 0x4f, 0x2d, 0x30, 0x39,
+	0x2d, 0x44, 0x49, 0x47, 0x45, 0x53, 0x54, 0x21,
+};
+
+static bool curve_status_is_set(const uint8_t *curve_list, size_t curve_list_len,
+				SE05x_ECCurve_t curve_id)
+{
+	if (curve_id == kSE05x_ECCurve_NA || (size_t)(curve_id - 1U) >= curve_list_len) {
+		return false;
+	}
+
+	return curve_list[curve_id - 1U] == kSE05x_SetIndicator_SET;
+}
+
+static smStatus_t read_secp256k1_status(pSe05xSession_t session, bool *is_set)
+{
+	uint8_t curve_list[32] = { 0 };
+	size_t curve_list_len = sizeof(curve_list);
+	smStatus_t sw = Se05x_API_ReadECCurveList(session, curve_list, &curve_list_len);
+
+	if (sw == SM_OK) {
+		*is_set = curve_status_is_set(curve_list, curve_list_len,
+					      kSE05x_ECCurve_Secp256k1);
+		LOG_INF("ReadECCurveList len=%u Secp256k1=%s", (unsigned int)curve_list_len,
+			*is_set ? "SET" : "NOT_SET");
+		se05x_demo_log_hex_preview("CurveList", curve_list, curve_list_len);
+	}
+
+	return sw;
+}
+
+static void ensure_secp256k1_curve(se05x_demo_stats_t *stats, pSe05xSession_t session)
+{
+	bool is_set = false;
+	smStatus_t sw = read_secp256k1_status(session, &is_set);
+
+	if (sw != SM_OK) {
+		se05x_demo_mark_fail_sw(stats, "ReadECCurveList(before)", sw);
+		return;
+	}
+
+	if (is_set) {
+		se05x_demo_mark_pass(stats, "Secp256k1AlreadySET");
+		return;
+	}
+
+	LOG_WRN("Secp256k1 is NOT_SET; creating curve will write SE05x persistent NVM once");
+	sw = Se05x_API_CreateCurve_secp256k1(session, kSE05x_ECCurve_Secp256k1);
+	if (sw != SM_OK) {
+		se05x_demo_mark_fail_sw(stats, "CreateCurve_secp256k1", sw);
+		return;
+	}
+	se05x_demo_mark_pass(stats, "CreateCurve_secp256k1");
+
+	is_set = false;
+	sw = read_secp256k1_status(session, &is_set);
+	if (sw != SM_OK) {
+		se05x_demo_mark_fail_sw(stats, "ReadECCurveList(after)", sw);
+		return;
+	}
+
+	if (is_set) {
+		se05x_demo_mark_pass(stats, "Secp256k1SETAfterCreate");
+	} else {
+		se05x_demo_mark_fail_sw(stats, "Secp256k1StillNOT_SET", SM_NOT_OK);
+	}
+}
+
+static void generate_transient_key_and_sign(se05x_demo_stats_t *stats,
+					    ex_sss_boot_ctx_t *boot_ctx,
+					    pSe05xSession_t se_session)
+{
+	SE05x_Result_t exists = kSE05x_Result_NA;
+	smStatus_t sw;
+	sss_object_t wallet_key = { 0 };
+	sss_asymmetric_t sign_ctx = { 0 };
+	sss_asymmetric_t verify_ctx = { 0 };
+	uint8_t signature[128] = { 0 };
+	size_t signature_len = sizeof(signature);
+	sss_status_t status;
+
+	sw = Se05x_API_CheckObjectExists(se_session, SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1,
+					 &exists);
+	if (sw != SM_OK) {
+		se05x_demo_mark_fail_sw(stats, "CheckObjectExists(WALLET_TEST_KEY)", sw);
+		return;
+	}
+	if (exists == kSE05x_Result_SUCCESS) {
+		LOG_ERR("object_id=0x%08" PRIX32 " already exists; abort to avoid touching unknown object",
+			(uint32_t)SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1);
+		se05x_demo_mark_fail_sw(stats, "WalletTestObjectIdAlreadyExists", SM_NOT_OK);
+		return;
+	}
+	se05x_demo_mark_pass(stats, "WalletTestObjectIdFree");
+
+	status = sss_key_object_init(&wallet_key, &boot_ctx->ks);
+	if (status != kStatus_SSS_Success) {
+		se05x_demo_mark_fail_status(stats, "sss_key_object_init(SECP256K1)", status);
+		return;
+	}
+
+	status = sss_key_object_allocate_handle(&wallet_key, SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1,
+					       kSSS_KeyPart_Pair,
+					       kSSS_CipherType_EC_NIST_K,
+					       32, kKeyObject_Mode_Transient);
+	if (status != kStatus_SSS_Success) {
+		se05x_demo_mark_fail_status(stats, "AllocateHandle(SECP256K1_TRANSIENT)", status);
+		goto cleanup;
+	}
+	se05x_demo_mark_pass(stats, "AllocateHandle(SECP256K1_TRANSIENT)");
+
+	status = sss_key_store_generate_key(&boot_ctx->ks, &wallet_key, 256, NULL);
+	if (status != kStatus_SSS_Success) {
+		se05x_demo_mark_fail_status(stats, "GenerateKey(SECP256K1_TRANSIENT)", status);
+		goto cleanup;
+	}
+	se05x_demo_mark_pass(stats, "GenerateKey(SECP256K1_TRANSIENT)");
+
+	status = sss_asymmetric_context_init(&sign_ctx, &boot_ctx->session, &wallet_key,
+					     kAlgorithm_SSS_SHA256, kMode_SSS_Sign);
+	if (status != kStatus_SSS_Success) {
+		se05x_demo_mark_fail_status(stats, "AsymContext(SignSECP256K1)", status);
+		goto cleanup;
+	}
+
+	status = sss_asymmetric_sign_digest(&sign_ctx, k_wallet_digest, sizeof(k_wallet_digest),
+					    signature, &signature_len);
+	if (status != kStatus_SSS_Success) {
+		se05x_demo_mark_fail_status(stats, "SignDigest(SECP256K1)", status);
+		goto cleanup;
+	}
+	se05x_demo_log_hex_preview("Secp256k1Signature", signature, signature_len);
+	se05x_demo_mark_pass(stats, "SignDigest(SECP256K1)");
+
+	status = sss_asymmetric_context_init(&verify_ctx, &boot_ctx->session, &wallet_key,
+					     kAlgorithm_SSS_SHA256, kMode_SSS_Verify);
+	if (status != kStatus_SSS_Success) {
+		se05x_demo_mark_fail_status(stats, "AsymContext(VerifySECP256K1)", status);
+		goto cleanup;
+	}
+
+	status = sss_asymmetric_verify_digest(&verify_ctx, k_wallet_digest, sizeof(k_wallet_digest),
+					      signature, signature_len);
+	if (status == kStatus_SSS_Success) {
+		se05x_demo_mark_pass(stats, "VerifyDigest(SECP256K1)");
+	} else {
+		se05x_demo_mark_fail_status(stats, "VerifyDigest(SECP256K1)", status);
+	}
+
+cleanup:
+	if (sign_ctx.session != NULL) {
+		sss_asymmetric_context_free(&sign_ctx);
+	}
+	if (verify_ctx.session != NULL) {
+		sss_asymmetric_context_free(&verify_ctx);
+	}
+	sss_key_object_free(&wallet_key);
+}
+
+static sss_status_t run_wallet_curve_check(ex_sss_boot_ctx_t *boot_ctx)
+{
+	se05x_demo_stats_t stats;
+	sss_se05x_session_t *session = (sss_se05x_session_t *)&boot_ctx->session;
+	pSe05xSession_t se_session = &session->s_ctx;
+
+	se05x_demo_stats_init(&stats, "WALLET_CURVE_CHECK");
+	LOG_INF("WALLET_CURVE_CHECK started: secp256k1 curve enable + transient sign/verify");
+	LOG_WRN("This demo may write SE05x NVM once if secp256k1 is NOT_SET");
+	LOG_INF("Transient test key object_id=0x%08" PRIX32 " disappears when session closes",
+		(uint32_t)SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1);
+
+	ensure_secp256k1_curve(&stats, se_session);
+	if (stats.fail == 0U) {
+		generate_transient_key_and_sign(&stats, boot_ctx, se_session);
+	}
+
+	se05x_demo_log_summary(&stats);
+	return se05x_demo_stats_result(&stats);
+}
+
+const se05x_demo_t g_se05x_demo_wallet_curve_check = {
+	.id = SE05X_DEMO_WALLET_CURVE_CHECK,
+	.name = "wallet_curve_check",
+	.when_to_use = "Research whether this SE05x can enable secp256k1 for BTC/ETH-style wallets.",
+	.flow = "Read curve list, create secp256k1 if needed, then generate transient key and sign/verify.",
+	.expected_output = "Secp256k1 SET, transient key generated, ECDSA signature preview, final fail=0.",
+	.se_features = "NVM curve creation, EC_NIST_K/secp256k1 transient key, ECDSA sign/verify.",
+	.run = run_wallet_curve_check,
+};

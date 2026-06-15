@@ -30,6 +30,7 @@ LOG_MODULE_REGISTER(nrf54lm20_se05x, LOG_LEVEL_INF);
  *   SE05X_DEMO_ECC_SIGN_VERIFY     - 06 号示例：写入 demo ECC 私钥并做签名验签。
  *   SE05X_DEMO_CERTIFICATE_STORE   - 07 号示例：写入 demo 设备证书并回读校验。
  *   SE05X_DEMO_TLS_CLIENT_IDENTITY - 08 号示例：用 06/07 的对象模拟 TLS 客户端身份。
+ *   SE05X_DEMO_WALLET_CURVE_CHECK  - 09 号示例：研究 secp256k1 曲线能否启用并签名。
  *
  * 每个具体 demo 都放在 demo/se05x_demo_xx_*.c 里。文件顶部有中文说明：
  *   - 适合什么情况使用

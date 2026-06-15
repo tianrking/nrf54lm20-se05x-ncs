@@ -109,6 +109,7 @@ target_sources(app PRIVATE
     demo/se05x_demo_06_ecc_sign_verify.c
     demo/se05x_demo_07_certificate_store.c
     demo/se05x_demo_08_tls_client_identity.c
+    demo/se05x_demo_09_wallet_curve_check.c
 )
 
 target_include_directories(app PRIVATE demo)

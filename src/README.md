@@ -42,6 +42,7 @@
 | `SE05X_DEMO_ECC_SIGN_VERIFY` | Demo 06，写入/复用 demo ECC 私钥并做签名验签。 |
 | `SE05X_DEMO_CERTIFICATE_STORE` | Demo 07，写入/复用 demo 设备证书并回读校验。 |
 | `SE05X_DEMO_TLS_CLIENT_IDENTITY` | Demo 08，复用 Demo 06/07 对象模拟 TLS 客户端身份。 |
+| `SE05X_DEMO_WALLET_CURVE_CHECK` | Demo 09，研究 secp256k1 曲线能否启用并完成 transient key 签名验签；可能写一次曲线参数 NVM，默认不运行。 |
 
 ## 主流程
 

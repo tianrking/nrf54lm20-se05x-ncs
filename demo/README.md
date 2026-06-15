@@ -8,6 +8,7 @@
 - Demo 01-05 默认不写 SE05x persistent NVM。
 - Demo 06/07 是写入型 demo，会写固定 demo object ID，已有对象时不覆盖。
 - Demo 08 不新写对象，只复用 Demo 06/07 已准备好的 key 和 certificate。
+- Demo 09 是钱包曲线研究 demo。它会先只读查询 secp256k1 状态；如果当前是 `NOT_SET`，会尝试写入 secp256k1 曲线参数到 SE05x persistent NVM；测试私钥使用 transient object，不写 persistent 私钥。
 - 先验证安全会话，再调用 APDU/SSS API。
 - 每个 demo 都输出 pass、skip、fail 统计，便于现场判断。
 - 串口运行时输出统一使用英文 ASCII，避免串口终端编码不一致造成中文乱码；完整中文说明保留在 README 和源码注释中。
@@ -25,6 +26,7 @@
 | 06 | `se05x_demo_06_ecc_sign_verify.c` | `ecc_sign_verify` | SE 内 ECC 私钥签名、外部公钥验签。 | 是，写 `0xEF060001` |
 | 07 | `se05x_demo_07_certificate_store.c` | `certificate_store` | 设备证书对象写入、回读和内容校验。 | 是，写 `0xEF070001` |
 | 08 | `se05x_demo_08_tls_client_identity.c` | `tls_client_identity` | TLS 客户端身份材料检查和 handshake digest 签名。 | 否，复用 06/07 |
+| 09 | `se05x_demo_09_wallet_curve_check.c` | `wallet_curve_check` | 验证 secp256k1 曲线能否启用，并用 transient key 做 ECDSA sign/verify。 | 可能写：仅在 secp256k1 为 `NOT_SET` 时写曲线参数；测试 key 不持久化 |
 
 ## 代码对应关系
 
@@ -39,6 +41,7 @@
 | Demo 06 | `se05x_demo_06_ecc_sign_verify.c` | `run_ecc_sign_verify()` | `g_se05x_demo_ecc_sign_verify` | persistent ECC key、transient public key、ECDSA sign/verify。 |
 | Demo 07 | `se05x_demo_07_certificate_store.c` | `run_certificate_store()` | `g_se05x_demo_certificate_store` | persistent binary certificate object、write/read/compare。 |
 | Demo 08 | `se05x_demo_08_tls_client_identity.c` | `run_tls_client_identity()` | `g_se05x_demo_tls_client_identity` | key/cert object check、certificate read、TLS digest sign。 |
+| Demo 09 | `se05x_demo_09_wallet_curve_check.c` | `run_wallet_curve_check()` | `g_se05x_demo_wallet_curve_check` | ReadECCurveList、CreateCurve secp256k1、transient EC_NIST_K key、ECDSA sign/verify。 |
 
 所有 demo 都通过 `demo/se05x_demo.c` 中的 demo catalog 注册，再由 `src/main.c` 根据 `APP_SELECTED_DEMO` 查找并调用 `demo->run(&s_boot_ctx)`。所以 README 中的流程图、demo 编号、源码文件和串口日志名称是一一对应的。
 
@@ -745,6 +748,93 @@ TLS certificate ready len=408 bit_len=3264
 TLS CertificateVerify signature produced
 TLS_CLIENT_IDENTITY 汇总：pass=... skip=0 fail=0
 Demo tls_client_identity 总体结果：OK
+```
+
+## Demo 09：wallet_curve_check
+
+文件：`se05x_demo_09_wallet_curve_check.c`
+
+### 真实业务场景
+
+这是硬件钱包方向的研究 demo，用来回答一个非常具体的问题：当前这颗 SE05x/SE052_B501 在当前 applet、OEF 和权限配置下，能不能从 `secp256k1 = NOT_SET` 走到可用状态，并进一步用 SE 原生 transient 私钥完成 ECDSA digest 签名和验签。
+
+它不是完整 BTC/ETH 钱包 demo。它不解析 BTC transaction，不计算 double-SHA256，不做 Ethereum Keccak，不派生地址，不生成 recovery id，也不处理 low-S 规范化。它只验证最底层的 SE 能力：`secp256k1` 曲线是否能启用、SE 内是否能生成该曲线 key、是否能对 32 字节 digest 做 ECDSA sign/verify。
+
+### NVM 风险边界
+
+| 项目 | 说明 |
+| --- | --- |
+| 曲线参数 | 如果 Demo 00/`AT+B` 显示 `Secp256k1 : NOT_SET`，Demo 09 会调用 `Se05x_API_CreateCurve_secp256k1()`，这会写 SE05x persistent NVM。 |
+| 重复运行 | 如果 secp256k1 已经是 `SET`，Demo 09 不重复创建曲线。 |
+| 测试私钥 | 使用 `kKeyObject_Mode_Transient`，object ID 为 `0xEF090001`，session 关闭后消失，不写 persistent 私钥。 |
+| 删除动作 | Demo 09 不删除对象、不 DeleteAll、不改生命周期、不改 policy。 |
+| 风险最高的内容 | 生产环境真正必须备份和管控的是 SCP03 管理 key、object ID 映射、策略、证书/公钥登记记录。曲线参数本身不是业务私钥，但它会占用/改变 SE 的 persistent 配置。 |
+
+### 使用到的 SE05x/SSS 功能和 API
+
+| 功能 | API | 代码位置 | 真实业务作用 |
+| --- | --- | --- | --- |
+| 读取曲线状态 | `Se05x_API_ReadECCurveList()` | `read_secp256k1_status()` | 判断 `kSE05x_ECCurve_Secp256k1` 当前是 `SET` 还是 `NOT_SET`。 |
+| 写入 secp256k1 曲线 | `Se05x_API_CreateCurve_secp256k1()` | `ensure_secp256k1_curve()` | 把 secp256k1 的 A/B/G/N/Prime 参数写入 SE，使后续 EC_NIST_K 256-bit key 有曲线基础。 |
+| 测试 object ID 冲突 | `Se05x_API_CheckObjectExists()` | `generate_transient_key_and_sign()` | 如果 `0xEF090001` 已存在就退出，避免误碰未知对象。 |
+| transient key 句柄 | `sss_key_object_allocate_handle()` | `generate_transient_key_and_sign()` | 分配 `kSSS_CipherType_EC_NIST_K`、`kSSS_KeyPart_Pair`、`kKeyObject_Mode_Transient` 的测试 key handle。 |
+| SE 内生成测试 key | `sss_key_store_generate_key()` | `generate_transient_key_and_sign()` | 在 SE 内生成 secp256k1 测试私钥，私钥不导出。 |
+| SE 内签名 | `sss_asymmetric_sign_digest()` | `generate_transient_key_and_sign()` | 对固定 32 字节 digest 生成 ECDSA signature。 |
+| 验证签名 | `sss_asymmetric_verify_digest()` | `generate_transient_key_and_sign()` | 验证生成的签名和测试 key 匹配，证明 sign/verify 链路成立。 |
+
+### API 流程
+
+```mermaid
+flowchart TD
+    A["run_wallet_curve_check()"] --> B["ReadECCurveList"]
+    B --> C{"Secp256k1 已经 SET?"}
+    C -->|yes| D["记录 Secp256k1AlreadySET"]
+    C -->|no| E["CreateCurve_secp256k1 写曲线参数 NVM"]
+    E --> F["ReadECCurveList 再次确认"]
+    F --> G{"Secp256k1 SET?"}
+    G -->|no| H["FAIL：当前配置不能启用 secp256k1"]
+    G -->|yes| I["CheckObjectExists 0xEF090001"]
+    D --> I
+    I --> J{"测试 object ID 是否空闲?"}
+    J -->|no| K["FAIL：避免误碰未知对象"]
+    J -->|yes| L["allocate_handle EC_NIST_K transient"]
+    L --> M["sss_key_store_generate_key 256-bit"]
+    M --> N["sss_asymmetric_sign_digest"]
+    N --> O["sss_asymmetric_verify_digest"]
+    O --> P["summary"]
+```
+
+### 结果怎么判断
+
+| 结果 | 含义 |
+| --- | --- |
+| `CreateCurve_secp256k1` 失败 | 当前 OEF、权限或 applet 配置不允许应用侧启用 secp256k1；这颗 SE 当前不能直接走 SE 原生 BTC/ETH secp256k1 私钥签名。 |
+| 曲线 `SET` 但 `GenerateKey` 失败 | 曲线列表能打开，但 SSS key generation 或 EC_NIST_K 映射仍不可用，需要继续查 hostlib 和 applet 权限。 |
+| `GenerateKey` 成功但 `SignDigest` 失败 | key 可以生成，但签名链路不可用，仍不能作为钱包签名根能力。 |
+| `SignDigest` 和 `VerifyDigest` 都成功 | SE 原生 secp256k1 ECDSA 基础链路成立。下一步才能做 BTC/ETH 钱包协议层。 |
+
+### 如果成功，BTC/ETH 是否就完美了
+
+不是一步到位，但这是最关键的硬件能力门槛之一。Demo 09 如果通过，只说明 SE 可以原生持有 secp256k1 私钥并对 32 字节 digest 签名。完整 BTC/ETH 钱包还需要继续实现：
+
+- BTC：交易解析、用户确认展示、double-SHA256、DER signature、sighash flag、地址格式、UTXO/path 管理。
+- ETH：交易/RLP 或 typed transaction 解析、Keccak-256、`r/s/v` 输出、recovery id、EIP-155/1559 等规则。
+- 安全交互：手机只提交待签名摘要或待解析交易，nRF 在本地显示关键信息并让用户确认，SE 只对确认后的 digest 签名。
+- 生产密钥策略：SE 内生成或安全注入真实私钥；不要把生产私钥明文放在手机、固件或串口日志里。
+
+### 期望输出
+
+```text
+WALLET_CURVE_CHECK started: secp256k1 curve enable + transient sign/verify
+ReadECCurveList len=17 Secp256k1=NOT_SET
+Secp256k1 is NOT_SET; creating curve will write SE05x persistent NVM once
+SAFE_TEST PASS CreateCurve_secp256k1
+ReadECCurveList len=17 Secp256k1=SET
+SAFE_TEST PASS GenerateKey(SECP256K1_TRANSIENT)
+Secp256k1Signature len=...
+SAFE_TEST PASS SignDigest(SECP256K1)
+SAFE_TEST PASS VerifyDigest(SECP256K1)
+WALLET_CURVE_CHECK summary: pass=... skip=0 fail=0
 ```
 
 ## 写入型 demo 安全说明

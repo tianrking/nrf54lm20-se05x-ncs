@@ -18,11 +18,13 @@ typedef enum {
 	SE05X_DEMO_ECC_SIGN_VERIFY = 6,     /* 06：SE 内 ECC 私钥签名和公钥验签 */
 	SE05X_DEMO_CERTIFICATE_STORE = 7,   /* 07：设备证书对象写入和回读校验 */
 	SE05X_DEMO_TLS_CLIENT_IDENTITY = 8, /* 08：TLS 客户端身份材料检查和挑战签名 */
+	SE05X_DEMO_WALLET_CURVE_CHECK = 9,  /* 09：钱包 secp256k1 曲线启用和签名验证研究 */
 } se05x_demo_id_t;
 
 #define SE05X_DEMO_OBJECT_ID_ECC_KEY 0xEF060001u
 #define SE05X_DEMO_OBJECT_ID_CERT    0xEF070001u
 #define SE05X_DEMO_OBJECT_ID_ECC_PUB 0xEF060002u
+#define SE05X_DEMO_OBJECT_ID_WALLET_SECP256K1 0xEF090001u
 #define SE05X_DEMO_ECC_KEY_BITS      256u
 
 typedef struct {
