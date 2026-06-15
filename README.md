@@ -47,6 +47,7 @@
 
 | 模块 | 文档 | 内容 |
 | --- | --- | --- |
+| API 参考 | [api/README.md](api/README.md) | 本工程实际使用 API 的作用、入参、输出参数、返回值和 demo 对应关系。 |
 | 应用入口 | [src/README.md](src/README.md) | `main.c` 的职责、demo 选择方式、debug 断点建议。 |
 | SE05x demo | [demo/README.md](demo/README.md) | 每个 demo 的场景、时序作用、预期输出和 Mermaid API 流程图。 |
 | 板级配置 | [boards/README.md](boards/README.md) | nRF54LM20 DK overlay、I2C 管脚、地址和排查方法。 |
