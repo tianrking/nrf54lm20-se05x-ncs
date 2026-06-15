@@ -172,9 +172,9 @@ static sss_status_t run_provisioning_check(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_provisioning_check = {
 	.id = SE05X_DEMO_PROVISIONING_CHECK,
 	.name = "provisioning_check",
-	.when_to_use = "准备写应用私钥、证书或 TLS 身份前，先确认 SE 能力和空间是否满足。",
-	.flow = "读取版本能力、检查保留对象、读取 persistent/transient 空间、曲线和 crypto object，并生成工站 nonce。",
-	.expected_output = "看到 applet 能力、空间余量、曲线列表、crypto object 状态和 nonce，最终 fail=0。",
-	.se_features = "SCP03、能力位、保留对象、空间查询、ECC 曲线、crypto object、随机数。",
+	.when_to_use = "Precheck SE capabilities and memory before provisioning app keys or certificates.",
+	.flow = "Read capabilities, reserved objects, memory, curves, crypto objects, and station nonce.",
+	.expected_output = "Capabilities, memory, curve list, crypto object status, nonce, and final fail=0.",
+	.se_features = "SCP03, feature bitmap, reserved objects, memory, ECC curves, crypto object, random.",
 	.run = run_provisioning_check,
 };

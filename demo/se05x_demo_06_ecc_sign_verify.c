@@ -254,9 +254,9 @@ static sss_status_t run_ecc_sign_verify(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_ecc_sign_verify = {
 	.id = SE05X_DEMO_ECC_SIGN_VERIFY,
 	.name = "ecc_sign_verify",
-	.when_to_use = "需要验证 SE 内应用私钥可用于设备挑战签名、云端验签或 TLS 身份前置能力时使用。",
-	.flow = "检查 demo ECC object，必要时写入 persistent 私钥，导入 transient 公钥，然后签名并验签。",
-	.expected_output = "看到 object_id、created/reused 状态、signature preview，最终 fail=0。",
-	.se_features = "SSS key object、persistent EC key、transient public key、ECDSA sign/verify。",
+	.when_to_use = "Verify SE private-key signing for device challenge, cloud verify, or TLS identity.",
+	.flow = "Check demo ECC object, write/reuse persistent private key, import transient public key, sign and verify.",
+	.expected_output = "object_id, created/reused state, signature preview, and final fail=0.",
+	.se_features = "SSS key object, persistent EC key, transient public key, ECDSA sign/verify.",
 	.run = run_ecc_sign_verify,
 };

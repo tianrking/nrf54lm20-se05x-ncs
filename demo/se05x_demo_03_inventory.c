@@ -173,9 +173,9 @@ static sss_status_t run_inventory(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_inventory = {
 	.id = SE05X_DEMO_INVENTORY,
 	.name = "inventory",
-	.when_to_use = "比较 SE05x/OEF 差异，或在做功能开发前查看当前芯片能力和资源。",
-	.flow = "检查保留对象、内存计数、曲线支持、crypto object list 和 ID list。",
-	.expected_output = "metadata 日志正常，最终 fail=0；ReadIDList 在部分 OEF 上允许 SKIP。",
-	.se_features = "SCP03、保留资源、存储空间计数、曲线和对象清单 APDU。",
+	.when_to_use = "Inspect SE05x/OEF capabilities and resources before feature development.",
+	.flow = "Check reserved objects, memory counters, curve support, crypto object list, and ID list.",
+	.expected_output = "Metadata logs are valid, final fail=0; ReadIDList may SKIP on some OEFs.",
+	.se_features = "SCP03, reserved resources, memory counters, curve list, and object list APDUs.",
 	.run = run_inventory,
 };

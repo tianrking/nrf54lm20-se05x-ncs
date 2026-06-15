@@ -11,6 +11,16 @@
 3. 通过 NXP Plug & Trust 打开 SE05x Platform SCP03 安全会话。
 4. 把控制权分发给 `demo/` 目录下的具体 demo。
 
+## 串口输出约定
+
+`main.c` 和各个 demo 的运行时串口日志统一使用英文 ASCII。中文说明不直接从固件打印到串口，而是放在 README 和源码注释里。这样串口终端即使不是 UTF-8 编码，也不会把中文显示成乱码。
+
+新增日志时建议遵守：
+
+- `LOG_INF()`、`LOG_WRN()`、`LOG_ERR()` 中的可见字符串使用英文 ASCII。
+- `printk()` 菜单和交互提示使用英文 ASCII。
+- 复杂背景、业务解释、安全风险写在中文 README 或源码注释中。
+
 ## Demo 选择
 
 修改下面这一行即可切换 demo：

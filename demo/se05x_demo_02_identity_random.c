@@ -126,9 +126,9 @@ static sss_status_t run_identity_random(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_identity_random = {
 	.id = SE05X_DEMO_IDENTITY_RANDOM,
 	.name = "identity_random",
-	.when_to_use = "想快速确认 SCP03 已打开，并且 SE05x 能读取身份和随机数时使用。",
-	.flow = "读取 applet 版本、UniqueID、三组随机数和 applet 状态。",
-	.expected_output = "能看到版本、UniqueID、不同随机数 preview、状态字节，最终 fail=0。",
-	.se_features = "SCP03、固定身份对象、SE05x 随机数生成器、applet 状态。",
+	.when_to_use = "Quick check that SCP03 is open and SE05x identity/random APIs work.",
+	.flow = "Read applet version, UniqueID, three random samples, and applet state.",
+	.expected_output = "Version, UniqueID, different random previews, state bytes, and final fail=0.",
+	.se_features = "SCP03, fixed identity object, SE05x random generator, and applet state.",
 	.run = run_identity_random,
 };

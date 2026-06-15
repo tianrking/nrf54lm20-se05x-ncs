@@ -205,9 +205,9 @@ static sss_status_t run_tls_client_identity(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_tls_client_identity = {
 	.id = SE05X_DEMO_TLS_CLIENT_IDENTITY,
 	.name = "tls_client_identity",
-	.when_to_use = "需要验证 TLS/mTLS 客户端身份的关键材料已经在 SE 内准备好时使用。",
-	.flow = "检查 ECC 私钥和证书对象，读取证书，然后用 SE 内私钥签名 TLS handshake digest。",
-	.expected_output = "看到 key/cert object 均存在、证书 preview、TLS 签名 preview，最终 fail=0。",
-	.se_features = "persistent EC key、persistent certificate object、TLS Certificate/CertificateVerify 调用骨架。",
+	.when_to_use = "Verify TLS/mTLS client identity material is already available in SE05x.",
+	.flow = "Check ECC private key and certificate objects, read certificate, sign TLS handshake digest in SE.",
+	.expected_output = "key/cert objects exist, certificate preview, TLS signature preview, and final fail=0.",
+	.se_features = "Persistent EC key, persistent certificate object, TLS Certificate/CertificateVerify skeleton.",
 	.run = run_tls_client_identity,
 };

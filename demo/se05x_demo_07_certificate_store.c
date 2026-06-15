@@ -200,9 +200,9 @@ static sss_status_t run_certificate_store(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_certificate_store = {
 	.id = SE05X_DEMO_CERTIFICATE_STORE,
 	.name = "certificate_store",
-	.when_to_use = "需要验证设备证书、证书链或业务公钥材料能写入 SE05x 并可回读时使用。",
-	.flow = "检查 demo certificate object，必要时写入 persistent DER 证书，然后回读并逐字节校验。",
-	.expected_output = "看到 cert object_id、created/reused 状态、证书长度和 preview，最终 fail=0。",
-	.se_features = "SSS binary object、persistent certificate storage、object exists、get/set key。",
+	.when_to_use = "Verify device certificate material can be stored in SE05x and read back.",
+	.flow = "Check demo certificate object, write/reuse persistent DER certificate, read back and compare.",
+	.expected_output = "cert object_id, created/reused state, certificate length, preview, and final fail=0.",
+	.se_features = "SSS binary object, persistent certificate storage, object exists, get/set key.",
 	.run = run_certificate_store,
 };

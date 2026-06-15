@@ -161,9 +161,9 @@ static sss_status_t run_business_onboarding(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_business_onboarding = {
 	.id = SE05X_DEMO_BUSINESS_ONBOARDING,
 	.name = "business_onboarding",
-	.when_to_use = "做设备注册、产测上报、云端绑定前，确认 SE 身份和注册 nonce 可用时使用。",
-	.flow = "读取 applet 版本、unique ID、Platform SCP 对象状态、注册 nonce 和 SE state。",
-	.expected_output = "看到 unique_id、scp_profile、registration_nonce、state，最终 fail=0。",
-	.se_features = "SCP03、UNIQUE_ID 固定对象、SE05x 随机数、对象存在检查、状态读取。",
+	.when_to_use = "Prepare SE identity and nonce fields for registration or factory reporting.",
+	.flow = "Read applet version, UniqueID, Platform SCP object state, registration nonce, and SE state.",
+	.expected_output = "unique_id, scp_profile, registration_nonce, state, and final fail=0.",
+	.se_features = "SCP03, UNIQUE_ID fixed object, SE05x random, object exists check, and state read.",
 	.run = run_business_onboarding,
 };

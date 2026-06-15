@@ -55,6 +55,10 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  *   Platform SCP03 安全会话内的版本读取、扩展版本、随机数、固定对象读取、
  *   保留对象存在检查、剩余空间读取、曲线列表、crypto object 列表、对象 ID
  *   列表和 applet 状态读取。
+ *
+ * 串口输出策略：
+ *   本文件顶部注释用中文解释完整背景；实际 printk()/LOG_xxx() 输出使用
+ *   英文 ASCII，避免串口工具编码不是 UTF-8 时出现中文乱码。
  */
 
 static int normalize_uart_char(int ch)

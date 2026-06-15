@@ -30,6 +30,14 @@ flowchart TD
 
 ## 公共类型和返回值约定
 
+### 串口日志编码约定
+
+本工程 API 文档和源码注释使用中文解释接口细节；固件运行时输出到串口的菜单、状态和错误日志使用英文 ASCII。原因是现场常用串口工具不一定按 UTF-8 解码中文，中文日志容易显示成 `����`。因此：
+
+- API 的作用、入参、输出参数、返回值、风险说明写在本文档中。
+- 串口只打印命令名、状态字、长度、object ID、`OK/FAIL/SKIP` 和少量英文说明。
+- 如果新增 API demo，应优先在本文补齐中文说明，而不是把长中文解释放进固件日志。
+
 | 类型 | 来源 | 含义 |
 | --- | --- | --- |
 | `ex_sss_boot_ctx_t` | NXP SSS example boot layer | 保存 host session、SE session、key store、key object 等上下文。`main.c` 中的 `s_boot_ctx` 就是这个类型。 |

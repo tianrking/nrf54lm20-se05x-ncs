@@ -19,8 +19,12 @@ LOG_MODULE_REGISTER(se05x_demo, LOG_LEVEL_INF);
  * 这个文件不放具体业务 demo，只负责：
  *   1. 收集 demo/se05x_demo_xx_*.c 暴露出来的 demo 描述。
  *   2. 根据 main.c 里选中的 enum 找到对应 demo。
- *   3. 在串口上打印“有哪些 demo、当前选了哪个、适用场景、流程、预期输出”。
+ *   3. 在串口上打印当前编译进固件的 demo catalog 和当前选择。
  *   4. 提供统一的 PASS/SKIP/FAIL 统计和十六进制 preview 打印。
+ *
+ * 串口编码约定：
+ *   运行时 LOG_xxx()/printk() 只输出英文 ASCII，避免串口终端不是 UTF-8 时
+ *   把中文显示成乱码。完整中文解释保留在 README 和各 demo 文件顶部注释中。
  *
  * 统计规则：
  *   PASS：这个步骤是必须项，且已经成功。

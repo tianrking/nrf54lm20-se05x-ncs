@@ -246,9 +246,9 @@ static sss_status_t run_safe_read_only(ex_sss_boot_ctx_t *boot_ctx)
 const se05x_demo_t g_se05x_demo_safe_read_only = {
 	.id = SE05X_DEMO_SAFE_READ_ONLY,
 	.name = "safe_read_only",
-	.when_to_use = "I2C、串口、PSA RNG、Platform SCP03 都准备好后，用它做完整只读冒烟测试。",
-	.flow = "打开 Platform SCP03 后，读取版本、随机数、唯一 ID、能力、内存和状态。",
-	.expected_output = "必须项 PASS，可选项允许 SKIP，最终 fail=0 且总体结果 OK。",
-	.se_features = "SCP03 安全会话和多组只读 APDU；不会写入或创建 SE05x 对象。",
+	.when_to_use = "Full read-only smoke test after I2C, UART, PSA RNG, and Platform SCP03 are ready.",
+	.flow = "Open Platform SCP03, then read version, random, UniqueID, features, memory, and state.",
+	.expected_output = "Required checks PASS, optional checks may SKIP, final fail=0 and overall OK.",
+	.se_features = "SCP03 secure session and read-only APDUs; no SE05x object writes or creation.",
 	.run = run_safe_read_only,
 };
