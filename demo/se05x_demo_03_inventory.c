@@ -44,6 +44,25 @@ LOG_MODULE_REGISTER(se05x_demo_inventory, LOG_LEVEL_INF);
  *   这个 demo 只读 metadata，不读取私钥材料，不创建、不更新、不删除对象。
  */
 
+static void inventory_get_version(se05x_demo_stats_t *stats, pSe05xSession_t session)
+{
+	uint8_t version[7] = { 0 };
+	size_t version_len = sizeof(version);
+	smStatus_t sw = Se05x_API_GetVersion(session, version, &version_len);
+
+	if (sw != SM_OK || version_len < sizeof(version)) {
+		se05x_demo_mark_fail_sw(stats, "GetVersion", sw);
+		return;
+	}
+
+	const uint16_t applet_config = ((uint16_t)version[3] << 8) | version[4];
+
+	LOG_INF("Applet version: %u.%u.%u", version[0], version[1], version[2]);
+	LOG_INF("Applet config : 0x%04" PRIX16, applet_config);
+	se05x_demo_log_applet_features(applet_config);
+	se05x_demo_mark_pass(stats, "GetVersion");
+}
+
 static void inventory_check_object(se05x_demo_stats_t *stats, pSe05xSession_t session,
 				   uint32_t object_id, const char *name)
 {
@@ -130,6 +149,7 @@ static sss_status_t run_inventory(ex_sss_boot_ctx_t *boot_ctx)
 	se05x_demo_stats_init(&stats, "INVENTORY");
 	LOG_INF("INVENTORY 开始：检查 SE05x applet 资源、能力和存储空间");
 
+	inventory_get_version(&stats, se_session);
 	inventory_check_object(&stats, se_session, kSE05x_AppletResID_UNIQUE_ID,
 			       "CheckObjectExists(UNIQUE_ID)");
 	inventory_check_object(&stats, se_session, kSE05x_AppletResID_FEATURE,
