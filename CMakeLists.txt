@@ -103,6 +103,8 @@ target_sources(app PRIVATE
     demo/se05x_demo_01_safe_read_only.c
     demo/se05x_demo_02_identity_random.c
     demo/se05x_demo_03_inventory.c
+    demo/se05x_demo_04_business_onboarding.c
+    demo/se05x_demo_05_provisioning_check.c
 )
 
 target_include_directories(app PRIVATE demo)

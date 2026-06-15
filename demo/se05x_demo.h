@@ -12,6 +12,8 @@ typedef enum {
 	SE05X_DEMO_SAFE_READ_ONLY = 0,  /* 01：完整只读冒烟测试 */
 	SE05X_DEMO_IDENTITY_RANDOM,     /* 02：身份信息和随机数快速检查 */
 	SE05X_DEMO_INVENTORY,           /* 03：能力、对象和空间清单 */
+	SE05X_DEMO_BUSINESS_ONBOARDING, /* 04：真实业务设备注册前置流程 */
+	SE05X_DEMO_PROVISIONING_CHECK,  /* 05：密钥和证书写入前预检流程 */
 } se05x_demo_id_t;
 
 typedef struct {

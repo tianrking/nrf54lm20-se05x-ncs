@@ -6,7 +6,7 @@
 - `se05x_bus` 平台无关 I2C transport API。
 - Zephyr I2C backend API。
 - demo framework API。
-- 当前三个 demo 调用到的 SE05x APDU API。
+- 当前 demo 调用到的 SE05x APDU API。
 
 NXP Plug & Trust hostlib 内部还有大量未使用的对象创建、密钥导入、签名、加密、TLS、证书等 API。那些 API 暂时不在本文档范围内，避免把未验证接口写成项目能力。后续新增 demo 时，再把对应 API 按同样格式补进来。
 
@@ -275,7 +275,7 @@ void se05x_demo_log_selection(const se05x_demo_t *demo);
 
 | 项目 | 说明 |
 | --- | --- |
-| 作用 | 打印当前选中的 demo 名称、适用场景、流程、预期输出和 SE05x 功能。 |
+| 作用 | 打印当前选中的 demo 名称、适用场景、流程、预期输出和 SE05x 功能。业务 demo 会在这里说明当前是否写 NVM、是否只是业务前置流程。 |
 | `demo` | 输入参数。通常来自 `se05x_demo_find()`。 |
 | 返回值 | 无。`demo == NULL` 时打印错误日志。 |
 
@@ -324,7 +324,7 @@ smStatus_t Se05x_API_GetVersion(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x applet 基础版本信息和 applet config 能力位。 |
-| 使用 demo | Demo 01、Demo 02、Demo 03。 |
+| 使用 demo | Demo 01、Demo 02、Demo 03、Demo 04、Demo 05。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `pappletVersion` | 输出 buffer。本工程使用 7 字节 buffer。 |
 | `appletVersionLen` | 输入输出参数。调用前是 buffer 容量；调用后是实际版本数据长度。 |
@@ -360,7 +360,7 @@ smStatus_t Se05x_API_GetRandom(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 从 SE05x 获取硬件/安全随机数。 |
-| 使用 demo | Demo 01、Demo 02。 |
+| 使用 demo | Demo 01、Demo 02、Demo 04、Demo 05。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `size` | 输入参数。请求随机数字节数。本工程请求 16 字节。 |
 | `randomData` | 输出 buffer，保存随机数。 |
@@ -382,7 +382,7 @@ smStatus_t Se05x_API_ReadObject(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x 中指定 object ID 的对象数据。 |
-| 使用 demo | Demo 01、Demo 02。 |
+| 使用 demo | Demo 01、Demo 02、Demo 04。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `objectID` | 输入参数。对象 ID。本工程读取 `kSE05x_AppletResID_UNIQUE_ID`。 |
 | `offset` | 输入参数。读取偏移。本工程传 `0`。 |
@@ -402,12 +402,12 @@ smStatus_t Se05x_API_CheckObjectExists(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 检查指定 secure object 是否存在。 |
-| 使用 demo | Demo 01、Demo 03。 |
+| 使用 demo | Demo 01、Demo 03、Demo 04、Demo 05。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `objectID` | 输入参数。对象 ID。当前检查 `UNIQUE_ID`、`FEATURE`、`PLATFORM_SCP`。 |
 | `presult` | 输出参数。`kSE05x_Result_SUCCESS` 表示存在；`kSE05x_Result_FAILURE` 表示不存在。 |
 | 返回值 | `SM_OK` 表示查询命令成功；查询成功不等于对象一定存在，需要继续看 `presult`。 |
-| 本工程处理 | Demo 01 中作为 pass/skip 检查；Demo 03 用于 inventory。 |
+| 本工程处理 | Demo 01 中作为 pass/skip 检查；Demo 03 用于 inventory；Demo 04/05 用于业务流程前置校验。 |
 
 ### `Se05x_API_GetFreeMemory`
 
@@ -420,7 +420,7 @@ smStatus_t Se05x_API_GetFreeMemory(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 查询 SE05x 指定内存类型剩余空间。 |
-| 使用 demo | Demo 01、Demo 03。 |
+| 使用 demo | Demo 01、Demo 03、Demo 05。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `memoryType` | 输入参数。内存类型：`kSE05x_MemoryType_PERSISTENT`、`kSE05x_MemoryType_TRANSIENT_RESET`、`kSE05x_MemoryType_TRANSIENT_DESELECT`。 |
 | `pfreeMem` | 输出参数。剩余空间字节数。 |
@@ -441,7 +441,7 @@ smStatus_t Se05x_API_ReadIDList(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x 对象 ID 列表。NXP 注释说明 `idlist` 是包含 4 字节 object identifier 的字节数组。 |
-| 使用 demo | Demo 01、Demo 03。 |
+| 使用 demo | Demo 01、Demo 03、Demo 05。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `outputOffset` | 输入参数。列表读取偏移。本工程传 `0`。 |
 | `filter` | 输入参数。过滤条件。本工程传 `0xFF`。 |
@@ -462,7 +462,7 @@ smStatus_t Se05x_API_ReadECCurveList(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x ECC curve 列表或曲线启用状态。 |
-| 使用 demo | Demo 01、Demo 03。 |
+| 使用 demo | Demo 01、Demo 03、Demo 05。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `curveList` | 输出 buffer，保存曲线列表数据。 |
 | `pcurveListLen` | 输入输出参数。调用前是 buffer 容量；调用后是实际返回长度。 |
@@ -498,29 +498,29 @@ smStatus_t Se05x_API_ReadState(pSe05xSession_t session_ctx,
 | 项目 | 说明 |
 | --- | --- |
 | 作用 | 读取 SE05x applet 状态摘要。 |
-| 使用 demo | Demo 01、Demo 02。 |
+| 使用 demo | Demo 01、Demo 02、Demo 04。 |
 | `session_ctx` | 输入参数。SE05x session。 |
 | `pstateValues` | 输出 buffer，保存状态字节。 |
 | `pstateValuesLen` | 输出长度参数。调用前是 buffer 容量；调用后是实际状态数据长度。 |
 | 返回值 | `SM_OK` 表示成功；其他值表示 APDU 失败或当前配置不支持。 |
-| 本工程处理 | Demo 01 中作为只读检查；Demo 02 中作为快速检查最后的状态闭环，失败时按 skip 处理。 |
+| 本工程处理 | Demo 01 中作为只读检查；Demo 02/04 中作为快速检查最后的状态闭环，失败时按 skip 处理。 |
 
 ## Demo 与 API 对应表
 
-| API | Demo 01 | Demo 02 | Demo 03 |
-| --- | --- | --- | --- |
-| `ex_sss_boot_open()` | 前置 | 前置 | 前置 |
-| `ex_sss_key_store_and_object_init()` | 前置 | 前置 | 前置 |
-| `Se05x_API_GetVersion()` | 是 | 是 | 是 |
-| `Se05x_API_GetExtVersion()` | 是 | 否 | 否 |
-| `Se05x_API_GetRandom()` | 是 | 是 | 否 |
-| `Se05x_API_ReadObject(UNIQUE_ID)` | 是 | 是 | 否 |
-| `Se05x_API_CheckObjectExists()` | 是 | 否 | 是 |
-| `Se05x_API_GetFreeMemory()` | 是 | 否 | 是 |
-| `Se05x_API_ReadIDList()` | 是 | 否 | 是 |
-| `Se05x_API_ReadECCurveList()` | 是 | 否 | 是 |
-| `Se05x_API_ReadCryptoObjectList()` | 是 | 否 | 是 |
-| `Se05x_API_ReadState()` | 是 | 是 | 否 |
+| API | Demo 01 | Demo 02 | Demo 03 | Demo 04 | Demo 05 |
+| --- | --- | --- | --- | --- | --- |
+| `ex_sss_boot_open()` | 前置 | 前置 | 前置 | 前置 | 前置 |
+| `ex_sss_key_store_and_object_init()` | 前置 | 前置 | 前置 | 前置 | 前置 |
+| `Se05x_API_GetVersion()` | 是 | 是 | 是 | 是 | 是 |
+| `Se05x_API_GetExtVersion()` | 是 | 否 | 否 | 否 | 否 |
+| `Se05x_API_GetRandom()` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce |
+| `Se05x_API_ReadObject(UNIQUE_ID)` | 是 | 是 | 否 | 是 | 否 |
+| `Se05x_API_CheckObjectExists()` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature |
+| `Se05x_API_GetFreeMemory()` | 是 | 否 | 是 | 否 | 是 |
+| `Se05x_API_ReadIDList()` | 是 | 否 | 是 | 否 | 否 |
+| `Se05x_API_ReadECCurveList()` | 是 | 否 | 是 | 否 | 是 |
+| `Se05x_API_ReadCryptoObjectList()` | 是 | 否 | 是 | 否 | 是 |
+| `Se05x_API_ReadState()` | 是 | 是 | 否 | 是 | 否 |
 
 ## 新增 API 文档规则
 

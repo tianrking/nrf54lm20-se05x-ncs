@@ -29,6 +29,8 @@
 
 当前工程刻意保持为 bring-up 示例，不包含 OTA、Bluetooth、NFC、MCUBoot 或产品业务流程。默认 demo 不写 SE05x NVM，适合先确认硬件、驱动、SCP03 和 API 适配是否可靠。
 
+从 Demo 04 开始，工程加入真实业务流程 demo。当前阶段仍使用官方/default Platform SCP03 key/profile，不改安全配置，不写 SE05x NVM；业务 demo 先覆盖真实产品里的设备注册、产测上报、应用 key/证书写入前预检流程。后续真正写应用私钥、证书或 TLS 身份时，会新增独立写入型 demo，并显式声明 object ID 和覆盖策略。
+
 ## 当前状态
 
 | 项目 | 状态 |
@@ -139,6 +141,8 @@ flowchart TD
 | `SE05X_DEMO_SAFE_READ_ONLY` | Demo 01 | 完整只读冒烟测试，首次 bring-up 推荐。 |
 | `SE05X_DEMO_IDENTITY_RANDOM` | Demo 02 | 快速读取身份和随机数。 |
 | `SE05X_DEMO_INVENTORY` | Demo 03 | 查看能力、对象、曲线和空间状态。 |
+| `SE05X_DEMO_BUSINESS_ONBOARDING` | Demo 04 | 真实设备注册/产测上报前置流程。 |
+| `SE05X_DEMO_PROVISIONING_CHECK` | Demo 05 | 应用 key/证书写入前业务预检流程。 |
 
 每个 demo 的详细流程见 [demo/README.md](demo/README.md)。
 

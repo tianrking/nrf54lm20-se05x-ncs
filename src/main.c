@@ -24,6 +24,8 @@ LOG_MODULE_REGISTER(nrf54lm20_se05x, LOG_LEVEL_INF);
  *   SE05X_DEMO_SAFE_READ_ONLY   - 01 号示例：最完整的只读冒烟测试。
  *   SE05X_DEMO_IDENTITY_RANDOM  - 02 号示例：快速读取身份信息和随机数。
  *   SE05X_DEMO_INVENTORY        - 03 号示例：查看能力、保留对象和存储空间。
+ *   SE05X_DEMO_BUSINESS_ONBOARDING - 04 号示例：真实设备注册/产测上报前置流程。
+ *   SE05X_DEMO_PROVISIONING_CHECK  - 05 号示例：应用 key/证书写入前预检流程。
  *
  * 每个具体 demo 都放在 demo/se05x_demo_xx_*.c 里。文件顶部有中文说明：
  *   - 适合什么情况使用

@@ -16,6 +16,8 @@
 | 01 | `se05x_demo_01_safe_read_only.c` | `safe_read_only` | 首次 bring-up、完整只读冒烟测试。 | 否 |
 | 02 | `se05x_demo_02_identity_random.c` | `identity_random` | 快速读取 SE 身份和随机数。 | 否 |
 | 03 | `se05x_demo_03_inventory.c` | `inventory` | 查看能力、对象、曲线、crypto object 和空间。 | 否 |
+| 04 | `se05x_demo_04_business_onboarding.c` | `business_onboarding` | 真实设备注册、产测上报、云端绑定前置流程。 | 否 |
+| 05 | `se05x_demo_05_provisioning_check.c` | `provisioning_check` | 应用私钥、证书、TLS 身份写入前的业务预检。 | 否 |
 
 ## 代码对应关系
 
@@ -24,6 +26,8 @@
 | Demo 01 | `se05x_demo_01_safe_read_only.c` | `run_safe_read_only()` | `g_se05x_demo_safe_read_only` | 版本、随机数、对象读取、对象检查、空间、列表、状态。 |
 | Demo 02 | `se05x_demo_02_identity_random.c` | `run_identity_random()` | `g_se05x_demo_identity_random` | 版本、唯一 ID、随机数、状态。 |
 | Demo 03 | `se05x_demo_03_inventory.c` | `run_inventory()` | `g_se05x_demo_inventory` | 版本能力、对象检查、空间、曲线、crypto object、对象列表。 |
+| Demo 04 | `se05x_demo_04_business_onboarding.c` | `run_business_onboarding()` | `g_se05x_demo_business_onboarding` | 注册身份字段、Platform SCP 对象、注册 nonce、状态。 |
+| Demo 05 | `se05x_demo_05_provisioning_check.c` | `run_provisioning_check()` | `g_se05x_demo_provisioning_check` | 写入前能力、保留对象、空间、曲线、crypto object、工站 nonce。 |
 
 所有 demo 都通过 `demo/se05x_demo.c` 中的 demo catalog 注册，再由 `src/main.c` 根据 `APP_SELECTED_DEMO` 查找并调用 `demo->run(&s_boot_ctx)`。所以 README 中的流程图、demo 编号、源码文件和串口日志名称是一一对应的。
 
@@ -262,6 +266,166 @@ Demo inventory 总体结果：OK
 ```
 
 ## 新增 demo 规范
+
+## Demo 04：business_onboarding
+
+文件：`se05x_demo_04_business_onboarding.c`
+
+### 真实业务场景
+
+这是设备注册、产测上报、云端绑定前的真实业务流程 demo。它不是单纯测试某个 API，而是模拟产品里常见的第一阶段注册材料采集：
+
+- 设备第一次上电后，读取 SE05x 唯一 ID。
+- 读取 applet version/config，确认当前安全芯片型号和能力。
+- 确认 Platform SCP 对象存在，说明当前 secure channel 的基础对象可见。
+- 从 SE05x 生成注册 nonce，真实业务里可用于防重放、注册请求关联或产测记录。
+- 读取 SE state，作为诊断字段。
+
+当前仍使用官方/default Platform SCP03 key/profile，不改安全配置，不写 SE05x NVM。真实量产时，后续还应该增加“SE 内应用私钥签名云端 challenge”的步骤，用来证明应用私钥确实在 SE 内且不可导出。
+
+### 使用到的 SE05x 功能和 API
+
+| 功能 | API | 代码位置 | 真实业务作用 |
+| --- | --- | --- | --- |
+| applet 版本和能力 | `Se05x_API_GetVersion()` | `onboarding_get_version()` | 注册记录里保存 SE applet 版本、能力位、SCP03 profile，方便云端和产线追踪。 |
+| 设备唯一身份 | `Se05x_API_ReadObject(kSE05x_AppletResID_UNIQUE_ID)` | `onboarding_read_unique_id()` | 作为设备注册主身份之一，可和 MCU SN、PCB SN、证书序列号做绑定。 |
+| Platform SCP 对象检查 | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_PLATFORM_SCP)` | `onboarding_check_platform_scp()` | 确认当前用于安全通道的保留对象存在，避免把未正确配置的 SE 放入业务链路。 |
+| 注册 nonce | `Se05x_API_GetRandom()` | `onboarding_get_registration_nonce()` | 生成 32 字节注册随机数，真实业务里可用于防重放、注册事务 ID 或 challenge。 |
+| SE 状态 | `Se05x_API_ReadState()` | `onboarding_read_state()` | 记录 SE 状态摘要，便于产测和售后诊断。 |
+
+### API 流程
+
+```mermaid
+flowchart TD
+    A["run_business_onboarding()"] --> B["GetVersion"]
+    B --> C["记录 scp_profile / applet_version / applet_config"]
+    C --> D["ReadObject UNIQUE_ID"]
+    D --> E["CheckObjectExists PLATFORM_SCP"]
+    E --> F["GetRandom REGISTER_NONCE 32 bytes"]
+    F --> G["ReadState"]
+    G --> H["组装业务注册字段"]
+    H --> I["summary"]
+```
+
+### 真实产品中的位置
+
+```mermaid
+sequenceDiagram
+    participant Device as nRF54LM20 设备
+    participant SE as SE05x
+    participant Factory as 产测/注册工站
+    participant Cloud as 业务云平台
+
+    Device->>SE: Platform SCP03 打开安全会话
+    Device->>SE: 读取 unique ID 和 applet version
+    Device->>SE: 生成 registration nonce
+    Device->>Factory: 上报 unique ID / version / nonce / state
+    Factory->>Cloud: 绑定设备记录
+    Note over Device,Cloud: 当前 demo 到这里结束，不写 NVM，不创建应用 key
+    Cloud-->>Device: 后续量产阶段可下发 challenge
+    Device->>SE: 后续写入型 demo 中使用 SE 内应用私钥签名 challenge
+```
+
+### 期望输出
+
+```text
+BUSINESS_ONBOARDING 开始
+Business field: se_profile=SE052_B501
+Business field: applet_version=7.2.22
+Business field: device_unique_id
+UniqueID len=18 preview=...
+Business field: platform_scp_object=present
+Business field: registration_nonce
+RegisterNonce len=32 preview=...
+Business field: se_state
+BUSINESS_ONBOARDING summary: pass=... skip=... fail=0
+Demo business_onboarding 总体结果：OK
+```
+
+## Demo 05：provisioning_check
+
+文件：`se05x_demo_05_provisioning_check.c`
+
+### 真实业务场景
+
+这是应用私钥、证书、TLS 身份或业务密钥写入 SE05x 之前的真实业务预检流程。真实产线在写入之前，不应该直接创建对象，而是先确认：
+
+- 当前 SE applet 支持目标算法能力。
+- Platform SCP03 通道和保留对象正常。
+- persistent 空间足够保存应用 key、证书或数据对象。
+- transient 空间和 crypto object 状态正常。
+- ECC curve 列表可读，后续可以选择合适曲线。
+- 工站有随机 nonce 可把本次写入动作和产测记录绑定。
+
+当前 demo 仍不写 SE05x NVM，不创建 key，不导证书。它只做真实 provisioning 工站的“写入前检查”阶段。
+
+### 使用到的 SE05x 功能和 API
+
+| 功能 | API | 代码位置 | 真实业务作用 |
+| --- | --- | --- | --- |
+| applet 版本和能力 | `Se05x_API_GetVersion()` | `provisioning_get_version()` | 判断是否支持 ECDSA、HMAC、RSA、AES、TLS 等后续业务能力。 |
+| Platform SCP 对象 | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_PLATFORM_SCP)` | `provisioning_check_object()` | 确认安全通道基础对象存在。 |
+| feature 对象 | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_FEATURE)` | `provisioning_check_object()` | 确认 feature 保留对象存在。 |
+| persistent 空间 | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_PERSISTENT)` | `provisioning_free_memory()` | 判断是否有空间保存长期 key、证书或业务对象。 |
+| transient reset 空间 | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_RESET)` | `provisioning_free_memory()` | 判断临时运算上下文空间是否正常。 |
+| transient deselect 空间 | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_DESELECT)` | `provisioning_free_memory()` | 判断 deselect 生命周期的临时空间是否正常。 |
+| ECC 曲线列表 | `Se05x_API_ReadECCurveList()` | `provisioning_curve_list()` | 为后续 ECC key、CSR、ECDSA 签名选择曲线做准备。 |
+| crypto object 列表 | `Se05x_API_ReadCryptoObjectList()` | `provisioning_crypto_object_list()` | 确认当前临时 crypto object 状态，避免工站流程残留状态影响写入。 |
+| 工站 nonce | `Se05x_API_GetRandom()` | `provisioning_generate_csr_nonce()` | 生成本次 provisioning/CSR 事务 nonce，后续可写入产测记录。 |
+
+### API 流程
+
+```mermaid
+flowchart TD
+    A["run_provisioning_check()"] --> B["GetVersion"]
+    B --> C["解析 applet_config 能力位"]
+    C --> D["CheckObjectExists PLATFORM_SCP"]
+    D --> E["CheckObjectExists FEATURE"]
+    E --> F["GetFreeMemory PERSISTENT"]
+    F --> G["GetFreeMemory TRANSIENT_RESET"]
+    G --> H["GetFreeMemory TRANSIENT_DESELECT"]
+    H --> I["ReadECCurveList"]
+    I --> J["ReadCryptoObjectList"]
+    J --> K["GetRandom CSR/WORK_ORDER_NONCE"]
+    K --> L["判断是否进入后续写入工站"]
+    L --> M["summary"]
+```
+
+### 真实产品中的位置
+
+```mermaid
+sequenceDiagram
+    participant Station as 产线 provisioning 工站
+    participant Device as nRF54LM20
+    participant SE as SE05x
+    participant Backend as 证书/设备后台
+
+    Station->>Device: 启动 provisioning_check 固件或命令
+    Device->>SE: Platform SCP03 打开安全会话
+    Device->>SE: 读取 version / feature / free memory / curve list
+    Device->>Station: 返回预检结果和工站 nonce
+    Station->>Backend: 查询该批次应写入的 key/cert 策略
+    Note over Station,SE: 当前 demo 到这里结束，不写 NVM
+    Station-->>Device: 后续写入型 demo 才会创建 key 或导入证书
+```
+
+### 期望输出
+
+```text
+PROVISIONING_CHECK 开始
+Provisioning field: scp_profile=SE052_B501
+Provisioning field: applet_version=7.2.22
+ECDSA_ECDH_ECDHE  : yes
+AES               : yes
+TLS               : yes
+CheckObjectExists(PLATFORM_SCP) exists=yes
+GetFreeMemory(PERSISTENT) free=...
+CurveList len=...
+CryptoObjectList len=...
+ProvisioningNonce len=16 preview=...
+PROVISIONING_CHECK summary: pass=... skip=... fail=0
+Demo provisioning_check 总体结果：OK
+```
 
 新增 demo 时建议遵循：
 
