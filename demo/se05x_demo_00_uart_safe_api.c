@@ -59,10 +59,21 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  * 串口输出策略：
  *   本文件顶部注释用中文解释完整背景；实际 printk()/LOG_xxx() 输出使用
  *   英文 ASCII，避免串口工具编码不是 UTF-8 时出现中文乱码。
+ *
+ * 串口输入策略：
+ *   推荐用文本模式发送 ASCII 字符，例如命令 3 发送字符 '3'，也就是 0x33。
+ *   有些串口工具打开 hex encoded 发送后，输入 03 会发送单字节 0x03，而不是
+ *   字符 '3'。为了现场排查方便，本 demo 兼容 0x00..0x09，把它们转换成
+ *   '0'..'9'。字母命令 a/b/c/d/e/q/h 仍建议用文本模式，或在 hex 模式下发送
+ *   ASCII 编码 61/62/63/64/65/71/68。
  */
 
-static int normalize_uart_char(int ch)
+static int normalize_uart_command(int ch)
 {
+	if (ch >= 0x00 && ch <= 0x09) {
+		return '0' + ch;
+	}
+
 	if (ch >= 'A' && ch <= 'Z') {
 		return ch + ('a' - 'A');
 	}
@@ -74,12 +85,11 @@ static int read_uart_command(void)
 {
 	while (1) {
 		int ch = console_getchar();
-		ch = normalize_uart_char(ch);
-		if (ch == '\r' || ch == '\n' || ch == ' ' || ch == '\t') {
+		if (ch == '\r' || ch == '\n' || ch == ' ') {
 			continue;
 		}
 
-		return ch;
+		return normalize_uart_command(ch);
 	}
 }
 
@@ -104,6 +114,7 @@ static void print_menu(void)
 	printk("e     : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
 	printk("q     : Quit Demo 00 and close the SE05x session\n");
 	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
+	printk("Input: text '3' sends ASCII 0x33; hex '03' sends raw 0x03 and is also accepted as command 3.\n");
 	printk("=======================================================\n");
 }
 
@@ -346,7 +357,13 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 			LOG_INF("UART_SAFE_API quit");
 			return kStatus_SSS_Success;
 		default:
-			printk("Unknown command '%c'. Type 0 or h for help.\n", cmd);
+			if (cmd >= 0x20 && cmd <= 0x7E) {
+				printk("Unknown command '%c' (0x%02X). Type 0 or h for help.\n",
+				       cmd, cmd);
+			} else {
+				printk("Unknown command byte 0x%02X. Type 0 or h for help.\n",
+				       cmd & 0xFF);
+			}
 			break;
 		}
 	}

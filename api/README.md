@@ -318,6 +318,8 @@ const char *se05x_demo_active_scp03_profile(void);
 
 Demo 00 的源码文件是 `demo/se05x_demo_00_uart_safe_api.c`。它不是新的 SE05x 协议层，而是一个串口交互式外壳：用户输入命令，固件调用一个已经验证过的安全 APDU API，并立即打印结果。
 
+串口输入推荐使用文本模式。文本模式发送 `3` 时，实际字节是 ASCII `0x33`；hex encoded 模式发送 `03` 时，实际字节是 raw `0x03`。当前 Demo 00 兼容 raw `0x00..0x09`，所以 hex `03` 也会执行命令 `3`。字母命令在 hex 模式下应发送对应 ASCII 编码，例如 `a=61`、`b=62`、`c=63`、`d=64`、`e=65`、`h=68`、`q=71`。
+
 | 串口命令 | 调用函数 | API 类别 | 传入参数重点 | 返回内容 | NVM 风险 |
 | --- | --- | --- | --- | --- | --- |
 | `1` | `cmd_get_version()` | `Se05x_API_GetVersion()` | 当前 `pSe05xSession_t`、7 字节 version buffer。 | applet version、applet config、SecureBox。 | 无 |
