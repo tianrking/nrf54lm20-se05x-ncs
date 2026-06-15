@@ -318,24 +318,26 @@ const char *se05x_demo_active_scp03_profile(void);
 
 Demo 00 的源码文件是 `demo/se05x_demo_00_uart_safe_api.c`。它不是新的 SE05x 协议层，而是一个串口交互式外壳：用户输入命令，固件调用一个已经验证过的安全 APDU API，并立即打印结果。
 
-串口输入推荐使用文本模式。文本模式发送 `3` 后，固件会直接打印本次命令对应的 API 调用和返回值，例如 `CMD '3' -> CALL Se05x_API_GetRandom(16)`、`OK GetRandom sw=0x9000 len=16` 和 16 字节随机数。命令后面的回车或换行是可选的；固件会跳过 `\r`、`\n` 和空格。为了方便不同串口工具测试，Demo 00 也兼容 0-9 的单字节 raw/hex 数字输入，但串口输出重点始终是“执行了哪个函数、SE05x 返回了什么”。
+串口输入推荐使用文本模式，并采用固定 `AT+X` 字符串命令。发送 `AT+3` 后，固件会直接打印本次命令对应的 API 调用和返回值，例如 `CMD AT+3 -> CALL Se05x_API_GetRandom(16)`、`OK GetRandom sw=0x9000 len=16` 和 16 字节随机数。命令后面的回车或换行是可选的；固件收到完整 `AT+X` 后即可解析执行。固定前缀让固件按字符串处理命令，避免单字节输入被串口工具的 text/hex 模式影响。
 
 | 串口命令 | 调用函数 | API 类别 | 传入参数重点 | 返回内容 | NVM 风险 |
 | --- | --- | --- | --- | --- | --- |
-| `1` | `cmd_get_version()` | `Se05x_API_GetVersion()` | 当前 `pSe05xSession_t`、7 字节 version buffer。 | applet version、applet config、SecureBox。 | 无 |
-| `2` | `cmd_get_ext_version()` | `Se05x_API_GetExtVersion()` | 当前 session、48 字节 version buffer。 | 扩展版本字节，日志打印 preview。 | 无 |
-| `3` | `cmd_get_random()` | `Se05x_API_GetRandom()` | 请求 16 字节随机数。 | 16 字节随机数 preview。 | 无 |
-| `4` | `cmd_read_unique_id()` | `Se05x_API_ReadObject()` | object ID 为 `kSE05x_AppletResID_UNIQUE_ID`，offset/length 为 `0`。 | UniqueID preview。 | 无 |
-| `5` | `cmd_check_object()` | `Se05x_API_CheckObjectExists()` | object ID 为 `kSE05x_AppletResID_UNIQUE_ID`。 | `exists=yes/no`。 | 无 |
-| `6` | `cmd_check_object()` | `Se05x_API_CheckObjectExists()` | object ID 为 `kSE05x_AppletResID_FEATURE`。 | `exists=yes/no`。 | 无 |
-| `7` | `cmd_check_object()` | `Se05x_API_CheckObjectExists()` | object ID 为 `kSE05x_AppletResID_PLATFORM_SCP`。 | `exists=yes/no`。 | 无 |
-| `8` | `cmd_free_memory()` | `Se05x_API_GetFreeMemory()` | memory type 为 `kSE05x_MemoryType_PERSISTENT`。 | persistent free bytes。 | 无 |
-| `9` | `cmd_free_memory()` | `Se05x_API_GetFreeMemory()` | memory type 为 `kSE05x_MemoryType_TRANSIENT_RESET`。 | transient reset free bytes。 | 无 |
-| `a` | `cmd_free_memory()` | `Se05x_API_GetFreeMemory()` | memory type 为 `kSE05x_MemoryType_TRANSIENT_DESELECT`。 | transient deselect free bytes。 | 无 |
-| `b` | `cmd_read_curve_list()` | `Se05x_API_ReadECCurveList()` | 当前 session、128 字节 curve buffer。 | ECC curve list preview。 | 无 |
-| `c` | `cmd_read_crypto_object_list()` | `Se05x_API_ReadCryptoObjectList()` | 当前 session、128 字节 list buffer。 | crypto object list preview。 | 无 |
-| `d` | `cmd_read_state()` | `Se05x_API_ReadState()` | 当前 session、128 字节 state buffer。 | applet state preview。 | 无 |
-| `e` | `cmd_read_id_list()` | `Se05x_API_ReadIDList()` | `outputOffset=0`、`filter=0xFF`。 | ID list preview；失败时按 SKIP。 | 无 |
+| `AT+0` / `AT+H` | `print_menu()` | 无 | 无。 | 重新打印菜单。 | 无 |
+| `AT+1` | `cmd_get_version()` | `Se05x_API_GetVersion()` | 当前 `pSe05xSession_t`、7 字节 version buffer。 | applet version、applet config、SecureBox。 | 无 |
+| `AT+2` | `cmd_get_ext_version()` | `Se05x_API_GetExtVersion()` | 当前 session、48 字节 version buffer。 | 扩展版本字节，日志打印 preview。 | 无 |
+| `AT+3` | `cmd_get_random()` | `Se05x_API_GetRandom()` | 请求 16 字节随机数。 | 16 字节随机数 preview。 | 无 |
+| `AT+4` | `cmd_read_unique_id()` | `Se05x_API_ReadObject()` | object ID 为 `kSE05x_AppletResID_UNIQUE_ID`，offset/length 为 `0`。 | UniqueID preview。 | 无 |
+| `AT+5` | `cmd_check_object()` | `Se05x_API_CheckObjectExists()` | object ID 为 `kSE05x_AppletResID_UNIQUE_ID`。 | `exists=yes/no`。 | 无 |
+| `AT+6` | `cmd_check_object()` | `Se05x_API_CheckObjectExists()` | object ID 为 `kSE05x_AppletResID_FEATURE`。 | `exists=yes/no`。 | 无 |
+| `AT+7` | `cmd_check_object()` | `Se05x_API_CheckObjectExists()` | object ID 为 `kSE05x_AppletResID_PLATFORM_SCP`。 | `exists=yes/no`。 | 无 |
+| `AT+8` | `cmd_free_memory()` | `Se05x_API_GetFreeMemory()` | memory type 为 `kSE05x_MemoryType_PERSISTENT`。 | persistent free bytes。 | 无 |
+| `AT+9` | `cmd_free_memory()` | `Se05x_API_GetFreeMemory()` | memory type 为 `kSE05x_MemoryType_TRANSIENT_RESET`。 | transient reset free bytes。 | 无 |
+| `AT+A` | `cmd_free_memory()` | `Se05x_API_GetFreeMemory()` | memory type 为 `kSE05x_MemoryType_TRANSIENT_DESELECT`。 | transient deselect free bytes。 | 无 |
+| `AT+B` | `cmd_read_curve_list()` | `Se05x_API_ReadECCurveList()` | 当前 session、128 字节 curve buffer。 | ECC curve list preview。 | 无 |
+| `AT+C` | `cmd_read_crypto_object_list()` | `Se05x_API_ReadCryptoObjectList()` | 当前 session、128 字节 list buffer。 | crypto object list preview。 | 无 |
+| `AT+D` | `cmd_read_state()` | `Se05x_API_ReadState()` | 当前 session、128 字节 state buffer。 | applet state preview。 | 无 |
+| `AT+E` | `cmd_read_id_list()` | `Se05x_API_ReadIDList()` | `outputOffset=0`、`filter=0xFF`。 | ID list preview；失败时按 SKIP。 | 无 |
+| `AT+Q` | 返回 `main.c` | 无 | 无。 | 关闭 Demo 00，随后由 main 关闭 session。 | 无 |
 
 Demo 00 不调用 `sss_key_store_set_key()`、对象创建、对象删除、policy 修改或生命周期修改 API，因此默认菜单可以安全反复运行。写入型能力仍然放在 Demo 06/07 中，并通过固定 demo object ID 和“已有对象不覆盖”的策略控制风险。
 
@@ -743,16 +745,16 @@ void sss_asymmetric_context_free(sss_asymmetric_t *context);
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ex_sss_boot_open()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
 | `ex_sss_key_store_and_object_init()` | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 | 前置 |
-| `Se05x_API_GetVersion()` | 是，命令 `1` | 是 | 是 | 是 | 是 | 是 | 否 | 否 | 否 |
-| `Se05x_API_GetExtVersion()` | 是，命令 `2` | 是 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
-| `Se05x_API_GetRandom()` | 是，命令 `3` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce | 否 | 否 | 否 |
-| `Se05x_API_ReadObject(UNIQUE_ID)` | 是，命令 `4` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
-| `Se05x_API_CheckObjectExists()` | 是，命令 `5/6/7` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature | 是，ECC key | 是，cert | 是，key/cert |
-| `Se05x_API_GetFreeMemory()` | 是，命令 `8/9/a` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
-| `Se05x_API_ReadIDList()` | 是，命令 `e` | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
-| `Se05x_API_ReadECCurveList()` | 是，命令 `b` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
-| `Se05x_API_ReadCryptoObjectList()` | 是，命令 `c` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
-| `Se05x_API_ReadState()` | 是，命令 `d` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
+| `Se05x_API_GetVersion()` | 是，命令 `AT+1` | 是 | 是 | 是 | 是 | 是 | 否 | 否 | 否 |
+| `Se05x_API_GetExtVersion()` | 是，命令 `AT+2` | 是 | 否 | 否 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_GetRandom()` | 是，命令 `AT+3` | 是 | 是 | 否 | 是，注册 nonce | 是，工站 nonce | 否 | 否 | 否 |
+| `Se05x_API_ReadObject(UNIQUE_ID)` | 是，命令 `AT+4` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
+| `Se05x_API_CheckObjectExists()` | 是，命令 `AT+5/6/7` | 是 | 否 | 是 | 是，Platform SCP | 是，Platform SCP/Feature | 是，ECC key | 是，cert | 是，key/cert |
+| `Se05x_API_GetFreeMemory()` | 是，命令 `AT+8/9/A` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
+| `Se05x_API_ReadIDList()` | 是，命令 `AT+E` | 是 | 否 | 是 | 否 | 否 | 否 | 否 | 否 |
+| `Se05x_API_ReadECCurveList()` | 是，命令 `AT+B` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
+| `Se05x_API_ReadCryptoObjectList()` | 是，命令 `AT+C` | 是 | 否 | 是 | 否 | 是 | 否 | 否 | 否 |
+| `Se05x_API_ReadState()` | 是，命令 `AT+D` | 是 | 是 | 否 | 是 | 否 | 否 | 否 | 否 |
 | `sss_key_object_init()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 |
 | `sss_key_object_allocate_handle()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 否 |
 | `sss_key_object_get_handle()` | 否 | 否 | 否 | 否 | 否 | 否 | 是 | 是 | 是 |

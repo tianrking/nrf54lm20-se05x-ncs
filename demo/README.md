@@ -93,31 +93,31 @@ Demo 00 **不写 SE05x NVM**，不会创建对象、不会写 key、不会写证
 
 | 命令 | API | 作用 | 是否安全 |
 | --- | --- | --- | --- |
-| `0` / `h` | 无 | 重新打印菜单。 | 是 |
-| `1` | `Se05x_API_GetVersion()` | 读取 applet version、applet config 和 SecureBox 版本。 | 是 |
-| `2` | `Se05x_API_GetExtVersion()` | 读取扩展版本和配置字节。 | 是 |
-| `3` | `Se05x_API_GetRandom()` | 生成 16 字节随机数。 | 是 |
-| `4` | `Se05x_API_ReadObject(kSE05x_AppletResID_UNIQUE_ID)` | 读取芯片 UniqueID。 | 是 |
-| `5` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_UNIQUE_ID)` | 检查 UniqueID 保留对象。 | 是 |
-| `6` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_FEATURE)` | 检查 feature 保留对象。 | 是 |
-| `7` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_PLATFORM_SCP)` | 检查 Platform SCP 保留对象。 | 是 |
-| `8` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_PERSISTENT)` | 读取 persistent 剩余空间。 | 是 |
-| `9` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_RESET)` | 读取 reset transient 剩余空间。 | 是 |
-| `a` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_DESELECT)` | 读取 deselect transient 剩余空间。 | 是 |
-| `b` | `Se05x_API_ReadECCurveList()` | 读取 ECC 曲线列表。 | 是 |
-| `c` | `Se05x_API_ReadCryptoObjectList()` | 读取 crypto object 列表。 | 是 |
-| `d` | `Se05x_API_ReadState()` | 读取 applet 状态摘要。 | 是 |
-| `e` | `Se05x_API_ReadIDList()` | 尝试读取对象 ID 列表；部分 OEF 可能不开放。 | 是，失败按 SKIP 看 |
-| `q` | 无 | 退出 Demo 00，返回 `main.c` 关闭 session。 | 是 |
+| `AT+0` / `AT+H` | 无 | 重新打印菜单。 | 是 |
+| `AT+1` | `Se05x_API_GetVersion()` | 读取 applet version、applet config 和 SecureBox 版本。 | 是 |
+| `AT+2` | `Se05x_API_GetExtVersion()` | 读取扩展版本和配置字节。 | 是 |
+| `AT+3` | `Se05x_API_GetRandom()` | 生成 16 字节随机数。 | 是 |
+| `AT+4` | `Se05x_API_ReadObject(kSE05x_AppletResID_UNIQUE_ID)` | 读取芯片 UniqueID。 | 是 |
+| `AT+5` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_UNIQUE_ID)` | 检查 UniqueID 保留对象。 | 是 |
+| `AT+6` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_FEATURE)` | 检查 feature 保留对象。 | 是 |
+| `AT+7` | `Se05x_API_CheckObjectExists(kSE05x_AppletResID_PLATFORM_SCP)` | 检查 Platform SCP 保留对象。 | 是 |
+| `AT+8` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_PERSISTENT)` | 读取 persistent 剩余空间。 | 是 |
+| `AT+9` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_RESET)` | 读取 reset transient 剩余空间。 | 是 |
+| `AT+A` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_DESELECT)` | 读取 deselect transient 剩余空间。 | 是 |
+| `AT+B` | `Se05x_API_ReadECCurveList()` | 读取 ECC 曲线列表。 | 是 |
+| `AT+C` | `Se05x_API_ReadCryptoObjectList()` | 读取 crypto object 列表。 | 是 |
+| `AT+D` | `Se05x_API_ReadState()` | 读取 applet 状态摘要。 | 是 |
+| `AT+E` | `Se05x_API_ReadIDList()` | 尝试读取对象 ID 列表；部分 OEF 可能不开放。 | 是，失败按 SKIP 看 |
+| `AT+Q` | 无 | 退出 Demo 00，返回 `main.c` 关闭 session。 | 是 |
 
 ### 串口发送模式
 
-推荐使用串口工具的 **text/文本发送模式**。例如要执行随机数接口，直接发送字符 `3`。命令后面可以带回车或换行，也可以不带；固件会自动跳过 `\r`、`\n` 和空格。为了方便不同串口工具测试，Demo 00 也兼容 0-9 的单字节 raw/hex 数字输入，但运行输出仍然只显示 API 调用和返回值。
+推荐使用串口工具的 **text/文本发送模式**。例如要执行随机数接口，发送字符串 `AT+3`。命令后面可以带回车或换行，也可以不带；固件收到完整 `AT+X` 后会立即解析并执行。固定前缀可以让固件按字符串命令处理，避免单字节输入被串口工具的 text/hex 模式影响。
 
 固件不会把重点放在串口字节编码上，而是直接打印本次命令对应的 API 调用和返回值：
 
 ```text
-CMD '3' -> CALL Se05x_API_GetRandom(16)
+CMD AT+3 -> CALL Se05x_API_GetRandom(16)
 OK   GetRandom sw=0x9000 len=16
      Random len=16 hex=AC 87 41 A7 ED 5D B4 BB 82 0D 4C B8 94 BD 85 B2
 ```
@@ -131,17 +131,17 @@ flowchart TD
     A["run_uart_safe_api()"] --> B["打印 UART 菜单"]
     B --> C["等待用户输入命令"]
     C --> D{"命令类型"}
-    D -->|1| E["GetVersion"]
-    D -->|2| F["GetExtVersion"]
-    D -->|3| G["GetRandom 16 bytes"]
-    D -->|4| H["ReadObject UNIQUE_ID"]
-    D -->|5/6/7| I["CheckObjectExists 保留对象"]
-    D -->|8/9/a| J["GetFreeMemory"]
-    D -->|b| K["ReadECCurveList"]
-    D -->|c| L["ReadCryptoObjectList"]
-    D -->|d| M["ReadState"]
-    D -->|e| N["ReadIDList"]
-    D -->|q| O["返回 main.c"]
+    D -->|AT+1| E["GetVersion"]
+    D -->|AT+2| F["GetExtVersion"]
+    D -->|AT+3| G["GetRandom 16 bytes"]
+    D -->|AT+4| H["ReadObject UNIQUE_ID"]
+    D -->|AT+5/6/7| I["CheckObjectExists 保留对象"]
+    D -->|AT+8/9/A| J["GetFreeMemory"]
+    D -->|AT+B| K["ReadECCurveList"]
+    D -->|AT+C| L["ReadCryptoObjectList"]
+    D -->|AT+D| M["ReadState"]
+    D -->|AT+E| N["ReadIDList"]
+    D -->|AT+Q| O["返回 main.c"]
     E --> P["打印 OK/FAIL 和返回数据"]
     F --> P
     G --> P
@@ -160,24 +160,24 @@ flowchart TD
 
 ### 时序作用
 
-Demo 00 的时序不是固定流水线，而是“session 打开后一直等待命令”。这对 debug 很有用：你可以先输入 `1` 看版本，再输入 `3` 连续观察随机数，再输入 `4` 看 UniqueID，最后输入 `b/c/d/e` 看 applet 能力和状态。每一步都只触发一个 API，因此返回错误时定位范围非常小。
+Demo 00 的时序不是固定流水线，而是“session 打开后一直等待命令”。这对 debug 很有用：你可以先输入 `AT+1` 看版本，再输入 `AT+3` 连续观察随机数，再输入 `AT+4` 看 UniqueID，最后输入 `AT+B`、`AT+C`、`AT+D`、`AT+E` 看 applet 能力和状态。每一步都只触发一个 API，因此返回错误时定位范围非常小。
 
 ### 期望输出
 
 ```text
-Demo 00 started. Type a command on UART. Type 0 or h for help, q to quit.
-se05x-safe-api> 1
-CMD '1' -> CALL Se05x_API_GetVersion
+Demo 00 started. Type an AT command on UART. Type AT+0 or AT+H for help, AT+Q to quit.
+se05x-safe-api> AT+1
+CMD AT+1 -> CALL Se05x_API_GetVersion
 OK   GetVersion sw=0x9000 len=7
      Applet version : 7.2.22
      Applet config  : 0x26F2
      SecureBox      : 255.255
-se05x-safe-api> 3
-CMD '3' -> CALL Se05x_API_GetRandom(16)
+se05x-safe-api> AT+3
+CMD AT+3 -> CALL Se05x_API_GetRandom(16)
 OK   GetRandom sw=0x9000 len=16
      Random len=16 hex=AC 87 41 A7 ED 5D B4 BB 82 0D 4C B8 94 BD 85 B2
-se05x-safe-api> e
-CMD 'e' -> CALL Se05x_API_ReadIDList
+se05x-safe-api> AT+E
+CMD AT+E -> CALL Se05x_API_ReadIDList
 SKIP ReadIDList sw=0xFFFF; this API may be disabled by the current applet/OEF.
 ```
 

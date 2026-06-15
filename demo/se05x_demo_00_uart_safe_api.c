@@ -23,7 +23,7 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  *
  * 适用场景：
  *   当你不想每次为了测一个 APDU 都重新改 main.c、重新编译、重新下载时，
- *   可以切到这个 demo。它启动后会停在串口菜单，输入一个数字或字母就调用
+ *   可以切到这个 demo。它启动后会停在串口菜单，输入一个 AT+X 字符串命令就调用
  *   一个 SE05x API，并立即打印返回状态和数据 preview。
  *
  * 为什么它默认是安全的：
@@ -41,16 +41,16 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  * 执行流程：
  *   1. main.c 先打开 I2C、T=1 over I2C 和 Platform SCP03 安全会话。
  *   2. 本 demo 打印菜单。
- *   3. 用户在串口输入命令。
+ *   3. 用户在串口输入 AT+X 命令。
  *   4. demo 调用对应 SE05x API。
  *   5. 串口打印 OK/FAIL/SKIP、返回长度、状态字和数据 preview。
- *   6. 输入 q 后退出 demo，main.c 关闭 SE05x session。
+ *   6. 输入 AT+Q 后退出 demo，main.c 关闭 SE05x session。
  *
  * 期望串口输出：
- *   - 输入 1 应返回 applet version/config。
- *   - 输入 3 应返回 16 字节随机数，每次一般不同。
- *   - 输入 4 应返回 UniqueID preview。
- *   - 输入 e 的 ReadIDList 在部分 OEF 上可能返回非 OK，这里按 SKIP 解释。
+ *   - 输入 AT+1 应返回 applet version/config。
+ *   - 输入 AT+3 应返回 16 字节随机数，每次一般不同。
+ *   - 输入 AT+4 应返回 UniqueID preview。
+ *   - 输入 AT+E 的 ReadIDList 在部分 OEF 上可能返回非 OK，这里按 SKIP 解释。
  *
  * 用到的 SE05x 功能：
  *   Platform SCP03 安全会话内的版本读取、扩展版本、随机数、固定对象读取、
@@ -62,18 +62,16 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  *   英文 ASCII，避免串口工具编码不是 UTF-8 时出现中文乱码。
  *
  * 串口输入策略：
- *   推荐使用文本模式发送单字符命令，例如 3、a、b、e、q；命令后面可以带回车或换行，
- *   本 demo 会自动跳过。为了兼容部分串口工具的 hex/raw 发送模式，代码也接受单字节
- *   数字控制值 0..9，并把它们归一化成字符 '0'..'9'。无论输入来自哪种模式，串口界面
- *   都只打印“执行了哪个 SE05x API、API 返回了什么”，不输出编码细节。
+ *   使用固定的 AT+X 字符串命令，例如 AT+1、AT+3、AT+A、AT+Q。这样固件按字符串
+ *   缓冲区解析命令，不再依赖“收到的第一个字节是什么”，可以避开串口工具 text/hex
+ *   模式切换带来的误判。命令后面可以带回车或换行，也可以不带；收到完整 AT+X 后
+ *   本 demo 就会立即执行。串口界面只打印“执行了哪个 SE05x API、API 返回了什么”。
  */
 
-static int normalize_uart_command(int ch)
-{
-	if (ch >= 0x00 && ch <= 0x09) {
-		return '0' + ch;
-	}
+#define UART_CMD_MAX_LEN 16U
 
+static int normalize_command_char(int ch)
+{
 	if (ch >= 'A' && ch <= 'Z') {
 		return ch + ('a' - 'A');
 	}
@@ -81,17 +79,12 @@ static int normalize_uart_command(int ch)
 	return ch;
 }
 
-static int read_uart_command(void)
+static bool is_line_end(int ch)
 {
-	while (1) {
-		int ch = console_getchar();
-		if (ch == '\r' || ch == '\n' || ch == ' ') {
-			continue;
-		}
-
-		return normalize_uart_command(ch);
-	}
+	return ch == '\r' || ch == '\n';
 }
+
+static bool is_known_command(int cmd);
 
 static const char *command_api_name(int cmd)
 {
@@ -134,6 +127,73 @@ static const char *command_api_name(int cmd)
 	}
 }
 
+static int parse_at_command(const char *line, size_t len)
+{
+	size_t start = 0;
+	size_t end = len;
+
+	while (start < end && line[start] == ' ') {
+		++start;
+	}
+	while (end > start && line[end - 1U] == ' ') {
+		--end;
+	}
+
+	if (end - start != 4U) {
+		return -1;
+	}
+
+	const char a = line[start];
+	const char t = line[start + 1U];
+	if (!((a == 'A' || a == 'a') && (t == 'T' || t == 't') &&
+	      line[start + 2U] == '+')) {
+		return -1;
+	}
+
+	const int cmd = normalize_command_char(line[start + 3U]);
+	if (!is_known_command(cmd)) {
+		return -1;
+	}
+
+	return cmd;
+}
+
+static int read_uart_command(void)
+{
+	char line[UART_CMD_MAX_LEN] = { 0 };
+	size_t len = 0;
+
+	while (1) {
+		int ch = console_getchar();
+
+		if (is_line_end(ch)) {
+			if (len == 0U) {
+				continue;
+			}
+
+			return parse_at_command(line, len);
+		}
+
+		if ((ch == '\b' || ch == 0x7F) && len > 0U) {
+			line[--len] = '\0';
+			continue;
+		}
+
+		if (len >= sizeof(line) - 1U) {
+			len = 0;
+			return -1;
+		}
+
+		line[len++] = (char)ch;
+		line[len] = '\0';
+
+		const int cmd = parse_at_command(line, len);
+		if (cmd >= 0) {
+			return cmd;
+		}
+	}
+}
+
 static bool is_known_command(int cmd)
 {
 	switch (cmd) {
@@ -163,11 +223,13 @@ static bool is_known_command(int cmd)
 static void print_api_call(int cmd)
 {
 	if (is_known_command(cmd)) {
-		printk("CMD '%c' -> CALL %s\n", cmd, command_api_name(cmd));
+		const int shown = (cmd >= 'a' && cmd <= 'z') ? cmd - ('a' - 'A') : cmd;
+
+		printk("CMD AT+%c -> CALL %s\n", shown, command_api_name(cmd));
 		return;
 	}
 
-	printk("Unknown command. Type 0 or h for help.\n");
+	printk("Unknown command. Use AT+0 or AT+H for help.\n");
 }
 
 static void print_hex_bytes(const char *label, const uint8_t *data, size_t data_len)
@@ -188,24 +250,24 @@ static void print_menu(void)
 {
 	printk("\n");
 	printk("========== SE05x Demo 00: UART safe API menu ==========\n");
-	printk("0 / h : Show this menu\n");
-	printk("1     : Se05x_API_GetVersion\n");
-	printk("2     : Se05x_API_GetExtVersion\n");
-	printk("3     : Se05x_API_GetRandom(16)\n");
-	printk("4     : Se05x_API_ReadObject(UNIQUE_ID)\n");
-	printk("5     : Se05x_API_CheckObjectExists(UNIQUE_ID)\n");
-	printk("6     : Se05x_API_CheckObjectExists(FEATURE)\n");
-	printk("7     : Se05x_API_CheckObjectExists(PLATFORM_SCP)\n");
-	printk("8     : Se05x_API_GetFreeMemory(PERSISTENT)\n");
-	printk("9     : Se05x_API_GetFreeMemory(TRANSIENT_RESET)\n");
-	printk("a     : Se05x_API_GetFreeMemory(TRANSIENT_DESELECT)\n");
-	printk("b     : Se05x_API_ReadECCurveList\n");
-	printk("c     : Se05x_API_ReadCryptoObjectList\n");
-	printk("d     : Se05x_API_ReadState\n");
-	printk("e     : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
-	printk("q     : Quit Demo 00 and close the SE05x session\n");
+	printk("AT+0 / AT+H : Show this menu\n");
+	printk("AT+1        : Se05x_API_GetVersion\n");
+	printk("AT+2        : Se05x_API_GetExtVersion\n");
+	printk("AT+3        : Se05x_API_GetRandom(16)\n");
+	printk("AT+4        : Se05x_API_ReadObject(UNIQUE_ID)\n");
+	printk("AT+5        : Se05x_API_CheckObjectExists(UNIQUE_ID)\n");
+	printk("AT+6        : Se05x_API_CheckObjectExists(FEATURE)\n");
+	printk("AT+7        : Se05x_API_CheckObjectExists(PLATFORM_SCP)\n");
+	printk("AT+8        : Se05x_API_GetFreeMemory(PERSISTENT)\n");
+	printk("AT+9        : Se05x_API_GetFreeMemory(TRANSIENT_RESET)\n");
+	printk("AT+A        : Se05x_API_GetFreeMemory(TRANSIENT_DESELECT)\n");
+	printk("AT+B        : Se05x_API_ReadECCurveList\n");
+	printk("AT+C        : Se05x_API_ReadCryptoObjectList\n");
+	printk("AT+D        : Se05x_API_ReadState\n");
+	printk("AT+E        : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
+	printk("AT+Q        : Quit Demo 00 and close the SE05x session\n");
 	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
-	printk("Input: send one command, for example 3. Line ending is optional.\n");
+	printk("Input: send one AT command, for example AT+3. Line ending is optional.\n");
 	printk("=======================================================\n");
 }
 
@@ -389,7 +451,7 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 	}
 
 	LOG_INF("UART_SAFE_API started: interactive safe API test, no NVM writes, no object creation");
-	printk("\nDemo 00 started. Type a command on UART. Type 0 or h for help, q to quit.\n");
+	printk("\nDemo 00 started. Type an AT command on UART. Type AT+0 or AT+H for help, AT+Q to quit.\n");
 	print_menu();
 
 	while (1) {
