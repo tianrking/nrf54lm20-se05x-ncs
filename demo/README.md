@@ -104,10 +104,11 @@ Demo 00 **不写 SE05x NVM**，不会创建对象、不会写 key、不会写证
 | `AT+8` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_PERSISTENT)` | 读取 persistent 剩余空间。 | 是 |
 | `AT+9` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_RESET)` | 读取 reset transient 剩余空间。 | 是 |
 | `AT+A` | `Se05x_API_GetFreeMemory(kSE05x_MemoryType_TRANSIENT_DESELECT)` | 读取 deselect transient 剩余空间。 | 是 |
-| `AT+B` | `Se05x_API_ReadECCurveList()` | 读取 ECC 曲线列表。 | 是 |
+| `AT+B` | `Se05x_API_ReadECCurveList()` | 读取 ECC 曲线列表，并解码 NIST、Brainpool、SecpK1 等 Weierstrass 曲线的 `SET/NOT_SET` 状态。 | 是 |
 | `AT+C` | `Se05x_API_ReadCryptoObjectList()` | 读取 crypto object 列表。 | 是 |
 | `AT+D` | `Se05x_API_ReadState()` | 读取 applet 状态摘要。 | 是 |
 | `AT+E` | `Se05x_API_ReadIDList()` | 尝试读取对象 ID 列表；部分 OEF 可能不开放。 | 是，失败按 SKIP 看 |
+| `AT+F` | Demo 00 内部安全探针 | 顺序执行 Demo 00 中全部安全查询/获取/只读探针 API，一次性输出能力报告。 | 是 |
 | `AT+Q` | 无 | 退出 Demo 00，返回 `main.c` 关闭 session。 | 是 |
 
 ### 串口发送模式
@@ -141,6 +142,7 @@ flowchart TD
     D -->|AT+C| L["ReadCryptoObjectList"]
     D -->|AT+D| M["ReadState"]
     D -->|AT+E| N["ReadIDList"]
+    D -->|AT+F| S["Run all safe probes"]
     D -->|AT+Q| O["返回 main.c"]
     E --> P["打印 OK/FAIL 和返回数据"]
     F --> P
@@ -151,6 +153,7 @@ flowchart TD
     K --> P
     L --> P
     M --> P
+    S --> P
     N --> Q{"ReadIDList 是否开放"}
     Q -->|成功| P
     Q -->|失败| R["打印 SKIP，不作为危险错误"]

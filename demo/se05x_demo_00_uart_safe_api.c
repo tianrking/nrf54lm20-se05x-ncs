@@ -69,6 +69,33 @@ LOG_MODULE_REGISTER(se05x_demo_uart_safe_api, LOG_LEVEL_INF);
  */
 
 #define UART_CMD_MAX_LEN 16U
+#define ARRAY_LEN(array) (sizeof(array) / sizeof((array)[0]))
+
+typedef struct {
+	uint8_t curve_id;
+	const char *name;
+	const char *note;
+} ecc_curve_info_t;
+
+static const ecc_curve_info_t k_weierstrass_curves[] = {
+	{ kSE05x_ECCurve_NIST_P192, "NIST_P192", "" },
+	{ kSE05x_ECCurve_NIST_P224, "NIST_P224", "" },
+	{ kSE05x_ECCurve_NIST_P256, "NIST_P256", "common IoT/TLS curve" },
+	{ kSE05x_ECCurve_NIST_P384, "NIST_P384", "" },
+	{ kSE05x_ECCurve_NIST_P521, "NIST_P521", "" },
+	{ kSE05x_ECCurve_Brainpool160, "Brainpool160", "" },
+	{ kSE05x_ECCurve_Brainpool192, "Brainpool192", "" },
+	{ kSE05x_ECCurve_Brainpool224, "Brainpool224", "" },
+	{ kSE05x_ECCurve_Brainpool256, "Brainpool256", "" },
+	{ kSE05x_ECCurve_Brainpool320, "Brainpool320", "" },
+	{ kSE05x_ECCurve_Brainpool384, "Brainpool384", "" },
+	{ kSE05x_ECCurve_Brainpool512, "Brainpool512", "" },
+	{ kSE05x_ECCurve_Secp160k1, "Secp160k1", "" },
+	{ kSE05x_ECCurve_Secp192k1, "Secp192k1", "" },
+	{ kSE05x_ECCurve_Secp224k1, "Secp224k1", "" },
+	{ kSE05x_ECCurve_Secp256k1, "Secp256k1", "BTC/ETH required curve" },
+	{ kSE05x_ECCurve_TPM_ECC_BN_P256, "TPM_ECC_BN_P256", "" },
+};
 
 static int normalize_command_char(int ch)
 {
@@ -120,6 +147,8 @@ static const char *command_api_name(int cmd)
 		return "Se05x_API_ReadState";
 	case 'e':
 		return "Se05x_API_ReadIDList";
+	case 'f':
+		return "Run all safe query APIs";
 	case 'q':
 		return "Quit";
 	default:
@@ -213,6 +242,7 @@ static bool is_known_command(int cmd)
 	case 'c':
 	case 'd':
 	case 'e':
+	case 'f':
 	case 'q':
 		return true;
 	default:
@@ -265,6 +295,7 @@ static void print_menu(void)
 	printk("AT+C        : Se05x_API_ReadCryptoObjectList\n");
 	printk("AT+D        : Se05x_API_ReadState\n");
 	printk("AT+E        : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
+	printk("AT+F        : Run all safe query/get/probe APIs once\n");
 	printk("AT+Q        : Quit Demo 00 and close the SE05x session\n");
 	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
 	printk("Input: send one AT command, for example AT+3. Line ending is optional.\n");
@@ -284,6 +315,54 @@ static void print_skip_sw(const char *name, smStatus_t sw)
 {
 	printk("SKIP %s sw=0x%04" PRIX16 "; this API may be disabled by the current applet/OEF.\n",
 	       name, (uint16_t)sw);
+}
+
+static const char *set_indicator_name(uint8_t value)
+{
+	switch (value) {
+	case kSE05x_SetIndicator_NA:
+		return "NA";
+	case kSE05x_SetIndicator_NOT_SET:
+		return "NOT_SET";
+	case kSE05x_SetIndicator_SET:
+		return "SET";
+	default:
+		return "UNKNOWN";
+	}
+}
+
+static bool curve_is_set(const uint8_t *curve_list, size_t curve_list_len, uint8_t curve_id)
+{
+	if (curve_id == 0U || (size_t)(curve_id - 1U) >= curve_list_len) {
+		return false;
+	}
+
+	return curve_list[curve_id - 1U] == kSE05x_SetIndicator_SET;
+}
+
+static void print_curve_capability_summary(const uint8_t *curve_list, size_t curve_list_len)
+{
+	printk("     ECC Weierstrass curve status:\n");
+	for (size_t i = 0; i < ARRAY_LEN(k_weierstrass_curves); ++i) {
+		const ecc_curve_info_t *curve = &k_weierstrass_curves[i];
+		const uint8_t value = (curve->curve_id > 0U &&
+				       (size_t)(curve->curve_id - 1U) < curve_list_len) ?
+					      curve_list[curve->curve_id - 1U] :
+					      kSE05x_SetIndicator_NA;
+
+		printk("       %-17s : %-7s", curve->name, set_indicator_name(value));
+		if (curve->note[0] != '\0') {
+			printk(" (%s)", curve->note);
+		}
+		printk("\n");
+	}
+
+	printk("     Wallet view:\n");
+	printk("       P-256 IoT/TLS signing : %s\n",
+	       curve_is_set(curve_list, curve_list_len, kSE05x_ECCurve_NIST_P256) ? "ready" : "not ready");
+	printk("       BTC/ETH secp256k1     : %s\n",
+	       curve_is_set(curve_list, curve_list_len, kSE05x_ECCurve_Secp256k1) ? "ready" : "not ready");
+	printk("       Ed25519/Solana        : not reported by ReadECCurveList; check GetVersion EDDSA bit\n");
 }
 
 static void cmd_get_version(pSe05xSession_t session)
@@ -387,6 +466,7 @@ static void cmd_read_curve_list(pSe05xSession_t session)
 		printk("OK   ReadECCurveList sw=0x%04" PRIX16 " len=%u\n",
 		       (uint16_t)sw, (unsigned int)curve_list_len);
 		print_hex_bytes("CurveList", curve_list, curve_list_len);
+		print_curve_capability_summary(curve_list, curve_list_len);
 	} else {
 		print_skip_sw("ReadECCurveList", sw);
 	}
@@ -437,6 +517,49 @@ static void cmd_read_id_list(pSe05xSession_t session)
 	} else {
 		print_skip_sw("ReadIDList", sw);
 	}
+}
+
+static void cmd_run_all_safe_queries(pSe05xSession_t session)
+{
+	printk("SAFE_PROBE begin: running all Demo 00 read/query/random APIs once.\n");
+	printk("SAFE_PROBE note : no NVM write, no object creation, no object deletion.\n");
+
+	printk("\n[1/13] Se05x_API_GetVersion\n");
+	cmd_get_version(session);
+	printk("\n[2/13] Se05x_API_GetExtVersion\n");
+	cmd_get_ext_version(session);
+	printk("\n[3/13] Se05x_API_GetRandom(16)\n");
+	cmd_get_random(session);
+	printk("\n[4/13] Se05x_API_ReadObject(UNIQUE_ID)\n");
+	cmd_read_unique_id(session);
+	printk("\n[5/13] Se05x_API_CheckObjectExists(UNIQUE_ID)\n");
+	cmd_check_object(session, kSE05x_AppletResID_UNIQUE_ID,
+			 "CheckObjectExists(UNIQUE_ID)");
+	printk("\n[6/13] Se05x_API_CheckObjectExists(FEATURE)\n");
+	cmd_check_object(session, kSE05x_AppletResID_FEATURE,
+			 "CheckObjectExists(FEATURE)");
+	printk("\n[7/13] Se05x_API_CheckObjectExists(PLATFORM_SCP)\n");
+	cmd_check_object(session, kSE05x_AppletResID_PLATFORM_SCP,
+			 "CheckObjectExists(PLATFORM_SCP)");
+	printk("\n[8/13] Se05x_API_GetFreeMemory(PERSISTENT)\n");
+	cmd_free_memory(session, kSE05x_MemoryType_PERSISTENT,
+			"GetFreeMemory(PERSISTENT)");
+	printk("\n[9/13] Se05x_API_GetFreeMemory(TRANSIENT_RESET)\n");
+	cmd_free_memory(session, kSE05x_MemoryType_TRANSIENT_RESET,
+			"GetFreeMemory(TRANSIENT_RESET)");
+	printk("\n[10/13] Se05x_API_GetFreeMemory(TRANSIENT_DESELECT)\n");
+	cmd_free_memory(session, kSE05x_MemoryType_TRANSIENT_DESELECT,
+			"GetFreeMemory(TRANSIENT_DESELECT)");
+	printk("\n[11/13] Se05x_API_ReadECCurveList\n");
+	cmd_read_curve_list(session);
+	printk("\n[12/13] Se05x_API_ReadCryptoObjectList\n");
+	cmd_read_crypto_object_list(session);
+	printk("\n[13/13] Se05x_API_ReadState + optional ReadIDList\n");
+	cmd_read_state(session);
+	printk("\n[optional] Se05x_API_ReadIDList\n");
+	cmd_read_id_list(session);
+
+	printk("\nSAFE_PROBE done.\n");
 }
 
 static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
@@ -512,6 +635,9 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 			break;
 		case 'e':
 			cmd_read_id_list(se_session);
+			break;
+		case 'f':
+			cmd_run_all_safe_queries(se_session);
 			break;
 		case 'q':
 			printk("Quit Demo 00. main.c will close the SE05x session.\n");
