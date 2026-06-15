@@ -81,7 +81,12 @@ static int normalize_uart_command(int ch)
 	return ch;
 }
 
-static int read_uart_command(void)
+typedef struct {
+	int raw;
+	int command;
+} uart_command_t;
+
+static uart_command_t read_uart_command(void)
 {
 	while (1) {
 		int ch = console_getchar();
@@ -89,8 +94,84 @@ static int read_uart_command(void)
 			continue;
 		}
 
-		return normalize_uart_command(ch);
+		return (uart_command_t){
+			.raw = ch,
+			.command = normalize_uart_command(ch),
+		};
 	}
+}
+
+static const char *command_api_name(int cmd)
+{
+	switch (cmd) {
+	case '0':
+	case 'h':
+		return "Show menu";
+	case '1':
+		return "Se05x_API_GetVersion";
+	case '2':
+		return "Se05x_API_GetExtVersion";
+	case '3':
+		return "Se05x_API_GetRandom(16)";
+	case '4':
+		return "Se05x_API_ReadObject(UNIQUE_ID)";
+	case '5':
+		return "Se05x_API_CheckObjectExists(UNIQUE_ID)";
+	case '6':
+		return "Se05x_API_CheckObjectExists(FEATURE)";
+	case '7':
+		return "Se05x_API_CheckObjectExists(PLATFORM_SCP)";
+	case '8':
+		return "Se05x_API_GetFreeMemory(PERSISTENT)";
+	case '9':
+		return "Se05x_API_GetFreeMemory(TRANSIENT_RESET)";
+	case 'a':
+		return "Se05x_API_GetFreeMemory(TRANSIENT_DESELECT)";
+	case 'b':
+		return "Se05x_API_ReadECCurveList";
+	case 'c':
+		return "Se05x_API_ReadCryptoObjectList";
+	case 'd':
+		return "Se05x_API_ReadState";
+	case 'e':
+		return "Se05x_API_ReadIDList";
+	case 'q':
+		return "Quit";
+	default:
+		return "Unknown command";
+	}
+}
+
+static void print_received_command(const uart_command_t *input)
+{
+	if (input->raw == input->command && input->raw >= 0x20 && input->raw <= 0x7E) {
+		printk("RX text command '%c' (raw=0x%02X) -> %s\n",
+		       input->command, input->raw, command_api_name(input->command));
+		return;
+	}
+
+	if (input->command >= 0x20 && input->command <= 0x7E) {
+		printk("RX raw byte 0x%02X normalized to command '%c' -> %s\n",
+		       input->raw & 0xFF, input->command, command_api_name(input->command));
+		return;
+	}
+
+	printk("RX raw byte 0x%02X -> %s\n", input->raw & 0xFF,
+	       command_api_name(input->command));
+}
+
+static void print_hex_bytes(const char *label, const uint8_t *data, size_t data_len)
+{
+	const size_t shown = data_len < 16U ? data_len : 16U;
+
+	printk("     %s len=%u hex=", label, (unsigned int)data_len);
+	for (size_t i = 0; i < shown; ++i) {
+		printk("%02X%s", data[i], i + 1U == shown ? "" : " ");
+	}
+	if (data_len > shown) {
+		printk(" ...");
+	}
+	printk("\n");
 }
 
 static void print_menu(void)
@@ -114,7 +195,7 @@ static void print_menu(void)
 	printk("e     : Se05x_API_ReadIDList (may return SKIP on some OEFs)\n");
 	printk("q     : Quit Demo 00 and close the SE05x session\n");
 	printk("Safety: this menu does not write NVM, create/delete objects, or change SE05x config.\n");
-	printk("Input: text '3' sends ASCII 0x33; hex '03' sends raw 0x03 and is also accepted as command 3.\n");
+	printk("Input: use text mode when possible. Text '3'=ASCII 0x33; hex '03'=raw 0x03, also accepted as command 3.\n");
 	printk("=======================================================\n");
 }
 
@@ -162,7 +243,7 @@ static void cmd_get_ext_version(pSe05xSession_t session)
 
 	print_result_sw("GetExtVersion", sw);
 	if (sw == SM_OK) {
-		se05x_demo_log_hex_preview("UART_API ExtVersion", version, version_len);
+		print_hex_bytes("ExtVersion", version, version_len);
 	}
 }
 
@@ -174,7 +255,8 @@ static void cmd_get_random(pSe05xSession_t session)
 
 	if (sw == SM_OK && random_len == sizeof(random)) {
 		printk("OK   GetRandom len=%u\n", (unsigned int)random_len);
-		se05x_demo_log_hex_preview("UART_API Random", random, random_len);
+		printk("     Meaning: 16 raw random bytes generated inside SE05x; displayed as hex.\n");
+		print_hex_bytes("Random", random, random_len);
 	} else {
 		print_result_sw("GetRandom", sw);
 	}
@@ -189,7 +271,7 @@ static void cmd_read_unique_id(pSe05xSession_t session)
 
 	print_result_sw("ReadObject(UNIQUE_ID)", sw);
 	if (sw == SM_OK) {
-		se05x_demo_log_hex_preview("UART_API UniqueID", unique_id, unique_id_len);
+		print_hex_bytes("UniqueID", unique_id, unique_id_len);
 	}
 }
 
@@ -228,7 +310,7 @@ static void cmd_read_curve_list(pSe05xSession_t session)
 
 	if (sw == SM_OK) {
 		printk("OK   ReadECCurveList len=%u\n", (unsigned int)curve_list_len);
-		se05x_demo_log_hex_preview("UART_API CurveList", curve_list, curve_list_len);
+		print_hex_bytes("CurveList", curve_list, curve_list_len);
 	} else {
 		print_skip_sw("ReadECCurveList", sw);
 	}
@@ -242,7 +324,7 @@ static void cmd_read_crypto_object_list(pSe05xSession_t session)
 
 	if (sw == SM_OK) {
 		printk("OK   ReadCryptoObjectList len=%u\n", (unsigned int)list_len);
-		se05x_demo_log_hex_preview("UART_API CryptoObjectList", list, list_len);
+		print_hex_bytes("CryptoObjectList", list, list_len);
 	} else {
 		print_skip_sw("ReadCryptoObjectList", sw);
 	}
@@ -256,7 +338,7 @@ static void cmd_read_state(pSe05xSession_t session)
 
 	if (sw == SM_OK) {
 		printk("OK   ReadState len=%u\n", (unsigned int)state_len);
-		se05x_demo_log_hex_preview("UART_API State", state, state_len);
+		print_hex_bytes("State", state, state_len);
 	} else {
 		print_skip_sw("ReadState", sw);
 	}
@@ -273,7 +355,7 @@ static void cmd_read_id_list(pSe05xSession_t session)
 	if (sw == SM_OK) {
 		printk("OK   ReadIDList len=%u more=0x%02X\n",
 		       (unsigned int)id_list_len, more);
-		se05x_demo_log_hex_preview("UART_API IDList", id_list, id_list_len);
+		print_hex_bytes("IDList", id_list, id_list_len);
 	} else {
 		print_skip_sw("ReadIDList", sw);
 	}
@@ -296,8 +378,10 @@ static sss_status_t run_uart_safe_api(ex_sss_boot_ctx_t *boot_ctx)
 
 	while (1) {
 		printk("\nse05x-safe-api> ");
-		int cmd = read_uart_command();
-		printk("%c\n", cmd);
+		uart_command_t input = read_uart_command();
+		int cmd = input.command;
+		printk("\n");
+		print_received_command(&input);
 
 		switch (cmd) {
 		case '0':
